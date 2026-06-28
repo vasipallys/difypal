@@ -8,3 +8,7 @@ test-results/
 .env.local
 *.log
 .DS_Store
+.upstream/
+runtime-engine/.venv/
+runtime-engine/.pytest_cache/
+runtime-engine/**/__pycache__/

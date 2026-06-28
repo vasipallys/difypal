@@ -27,6 +27,8 @@ const api: DesktopApi = {
   runtime: {
     validate: content => ipcRenderer.invoke('runtime:validate', content),
     simulate: (content, inputs, mocks) => ipcRenderer.invoke('runtime:simulate', content, inputs, mocks),
+    standaloneStatus: () => ipcRenderer.invoke('runtime:standalone-status'),
+    runStandalone: (content, inputs, profileId) => ipcRenderer.invoke('runtime:run-standalone', content, inputs, profileId),
     generateAI: (profileId, prompt) => ipcRenderer.invoke('runtime:generate-ai', profileId, prompt),
     runDify: (profileId, inputs, user) => ipcRenderer.invoke('runtime:run-dify', profileId, inputs, user),
     testDify: profileId => ipcRenderer.invoke('runtime:test-dify', profileId),

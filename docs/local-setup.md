@@ -6,6 +6,7 @@
 git clone <this repository>
 cd difypal
 npm install
+npm run runtime:setup
 npm run dev
 ```
 
@@ -18,6 +19,20 @@ npm run dev
 The development CSP allows only the local Vite server and its WebSocket in
 addition to normal configured HTTP/HTTPS calls.
 
+## Standalone Graphon runtime
+
+Graphon mode requires Python 3.12 or 3.13 and `uv`. Install and verify the
+isolated sidecar with:
+
+```bash
+npm run runtime:setup
+npm run runtime:test
+```
+
+The environment is created under `runtime-engine/.venv` and is ignored by Git.
+Electron communicates with it over standard input/output; it does not open a
+local network port.
+
 ## Quality checks
 
 ```bash
@@ -25,6 +40,7 @@ npm run typecheck
 npm test
 npm run build
 npm run test:e2e
+npm run runtime:test
 ```
 
 The E2E test launches the installed Electron binary with a temporary DevTools

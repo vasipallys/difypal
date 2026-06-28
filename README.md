@@ -19,6 +19,8 @@ See [Dify compatibility](docs/dify-compatibility.md) for evidence and caveats.
 - Dify schema, version, graph, variable, security, and prompt checks
 - Monaco YAML editor and React Flow graph
 - Safe local simulation with explicit mocks and node trace
+- Standalone execution through official Graphon `0.5.3`, without Dify's
+  PostgreSQL, Redis, Celery, Flask API, or web server
 - Markdown documentation and test-plan generation
 - Local SQLite project/history storage
 - OS-encrypted AI and Dify credentials through Electron `safeStorage`
@@ -34,9 +36,11 @@ Requirements:
 
 - Node.js 22 or newer
 - npm 10 or newer
+- Python 3.12 or 3.13 plus `uv` for the optional standalone Graphon runtime
 
 ```bash
 npm install
+npm run runtime:setup
 npm run dev
 ```
 
@@ -57,6 +61,8 @@ npm run typecheck   # strict TypeScript check
 npm test            # Vitest unit tests
 npm run test:e2e    # build and run the real Electron Playwright smoke test
 npm run check       # typecheck, unit tests, production build
+npm run runtime:setup # install pinned Graphon 0.5.3 sidecar
+npm run runtime:test  # test the Python runtime bridge
 npm run package     # platform installer via electron-builder
 npm run package:dir # unpacked application directory
 ```
@@ -73,7 +79,8 @@ and Linux on Linux for predictable native signing and installer behavior.
    Electron main process after approval.
 4. Generate the draft.
 5. Review **DSL Editor**, **Visual Workflow**, and **Validation**.
-6. Use **Debugger** with mocks for model/network/code nodes.
+6. Use **Debugger** in Simulation mode for inert mocks, **Graphon** mode for
+   standalone execution, or Dify API mode for a published app.
 7. Generate **Documentation** and **Test Cases**.
 8. Click **Export DSL**, approve the request in **AI Review**, then export.
 
@@ -126,8 +133,11 @@ non-secret development defaults.
 
 ## Known limitations
 
-- Local simulation is not Dify runtime equivalence. LLM, HTTP, tool, retrieval,
-  agent, datasource, and code nodes use mocks; code is deliberately inert.
+- Simulation is not Dify runtime equivalence; use Graphon mode when real local
+  traversal is required.
+- Standalone Graphon executes its supported built-ins. Plugin tools, knowledge
+  retrieval, sandboxed code, uploaded files, and resumable human-input flows
+  still need their Dify/Slim service dependencies and fail explicitly.
 - The source-derived validator covers structural contracts and high-value
   node requirements. Dify node DTOs permit compatibility extras, and plugin
   schemas can evolve independently.
@@ -148,7 +158,6 @@ non-secret development defaults.
 - Source-generated JSON Schema and Monaco completion for every node revision
 - Graph-to-YAML editing with transactional diffs
 - Plugin manifest discovery and credential-slot mapping
-- Graphon-backed optional local runtime in an isolated helper process
 - Streaming Dify traces, breakpoints, and resumable human-input forms
 - Signed auto-update and platform code-signing pipelines
 - HTML/PDF documentation rendering
@@ -156,6 +165,7 @@ non-secret development defaults.
 ## Source provenance
 
 - [Official Dify repository](https://github.com/langgenius/dify)
+- [Official Graphon runtime](https://github.com/langgenius/graphon)
 - [Pinned AppDslService source](https://github.com/langgenius/dify/blob/7a111c22260bf41af38a1452a34a7b2cd16668e3/api/services/app_dsl_service.py)
 - [Dify Run Workflow API](https://docs.dify.ai/api-reference/workflows/run-workflow)
 - [Playwright Electron API](https://playwright.dev/docs/api/class-electron)

@@ -236,29 +236,35 @@ textarea { resize: vertical; line-height: 1.55; }
 .issue p { margin: 4px 0; color: #aeb9c8; font-size: 10.5px; line-height: 1.45; }
 .issue code { color: #6faed7; font-size: 9px; }
 
-.debug-layout { display: grid; grid-template-columns: 330px 1fr; height: 100%; }
-.debug-config { padding: 22px; border-right: 1px solid var(--line); overflow: auto; }
+.debug-layout { display: grid; grid-template-columns: 330px minmax(0, 1fr); min-width: 0; min-height: 0; height: 100%; overflow: hidden; }
+.debug-config { min-width: 0; min-height: 0; padding: 22px; border-right: 1px solid var(--line); overflow: auto; }
 .section-heading { margin-bottom: 20px; }
 .section-heading h2 { font-size: 21px; }
 .debug-config label { margin-bottom: 13px; }
 .mode-switch { display: grid; grid-template-columns: 1fr 1fr; margin-bottom: 16px; padding: 3px; border: 1px solid #27364a; border-radius: 8px; background: #0c131d; }
+.mode-switch.three { grid-template-columns: repeat(3, 1fr); }
 .mode-switch button { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 8px; border: 0; border-radius: 5px; color: #748499; background: transparent; font-size: 10px; cursor: pointer; }
 .mode-switch button svg { width: 14px; }
 .mode-switch button.active { color: #d9f5e9; background: #1c342c; }
+.engine-status { display: flex; align-items: center; gap: 7px; margin: -5px 0 13px; padding: 8px 9px; border: 1px solid #4d3c30; border-radius: 6px; color: #c49778; background: #211a16; font-size: 9.5px; }
+.engine-status.ready { color: #83cdae; border-color: #2d5947; background: #12231d; }
 .code-input { font-family: "SFMono-Regular", Consolas, monospace; font-size: 10.5px; }
-.trace-panel { min-width: 0; display: flex; flex-direction: column; }
+.trace-panel { min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
 .trace-status { padding: 3px 7px; border-radius: 10px; color: #7f8da0; background: #1b2634; font-size: 9px; text-transform: uppercase; }
 .trace-status.succeeded { color: #7dd3ae; }.trace-status.failed { color: #ff8995; }.trace-status.paused { color: #f2bd6c; }
-.trace-list { flex: 1; overflow: auto; padding: 18px; }
-.trace-step { display: grid; grid-template-columns: 27px 1fr; gap: 10px; padding-bottom: 19px; position: relative; }
+.trace-list { flex: 1; min-width: 0; min-height: 0; overflow: auto; overscroll-behavior: contain; scrollbar-gutter: stable; padding: 18px; }
+.trace-step { display: grid; grid-template-columns: 27px minmax(0, 1fr); min-width: 0; gap: 10px; padding-bottom: 19px; position: relative; }
+.trace-step > div { min-width: 0; }
 .trace-step:not(:last-child)::before { content: ""; position: absolute; left: 13px; top: 27px; bottom: 1px; width: 1px; background: #2c3b50; }
 .trace-index { display: grid; place-items: center; width: 27px; height: 27px; border: 1px solid #3c536d; border-radius: 50%; color: #8fd8b9; background: #111b27; font-size: 9px; z-index: 1; }
 .trace-title { display: flex; align-items: center; gap: 8px; min-height: 27px; }
 .trace-title strong { font-size: 11.5px; }.trace-title code { color: #6f8298; font-size: 9px; }
 .trace-title span { margin-left: auto; font-size: 8.5px; text-transform: uppercase; color: #70c7a2; }
 .trace-step p { color: #8392a6; font-size: 10px; }
-.trace-step details { color: #728299; font-size: 9.5px; }
+.trace-step details { min-width: 0; color: #728299; font-size: 9.5px; }
 .trace-step pre, .diff-preview { padding: 10px; border: 1px solid #26354a; border-radius: 6px; color: #9fb0c5; background: #0a111a; font: 9.5px/1.5 ui-monospace, monospace; overflow: auto; }
+.trace-step pre { width: 100%; max-width: 100%; max-height: 360px; margin: 8px 0 0; white-space: pre; overflow-wrap: normal; word-break: normal; overscroll-behavior: contain; scrollbar-gutter: stable both-edges; }
+.trace-step pre:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
 .debug-input-error { display: flex; align-items: flex-start; gap: 6px; margin: 0; padding: 9px; border: 1px solid #61343b; border-radius: 6px; color: #ff9aa4; background: #28171d; font-size: 9.5px; line-height: 1.45; }
 .debug-input-error svg { flex: 0 0 auto; }
 .simulation-blocked { display: grid; grid-template-columns: 30px 1fr; gap: 12px; max-width: 760px; padding: 16px; border: 1px solid #61343b; border-radius: 9px; color: #ff8f9a; background: #21151b; }

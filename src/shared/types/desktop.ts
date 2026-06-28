@@ -71,6 +71,18 @@ export interface DifyProfile {
   hasApiKey?: boolean
 }
 
+export interface RuntimeEngineStatus {
+  available: boolean
+  engine: 'graphon'
+  engineVersion: string
+  pythonVersion: string
+  supportedPython: string
+}
+
+export interface RuntimeEngineResult extends SimulationResult {
+  engine: RuntimeEngineStatus
+}
+
 export interface DesktopApi {
   projects: {
     list(): Promise<ProjectSummary[]>
@@ -97,6 +109,8 @@ export interface DesktopApi {
   runtime: {
     validate(content: string): Promise<ValidationResult>
     simulate(content: string, inputs: Record<string, unknown>, mocks: Record<string, unknown>): Promise<SimulationResult>
+    standaloneStatus(): Promise<RuntimeEngineStatus>
+    runStandalone(content: string, inputs: Record<string, unknown>, profileId?: string): Promise<RuntimeEngineResult>
     generateAI(profileId: string, prompt: string): Promise<{ text: string; model: string }>
     runDify(profileId: string, inputs: Record<string, unknown>, user: string): Promise<Record<string, unknown>>
     testDify(profileId: string): Promise<{ ok: boolean; message: string }>

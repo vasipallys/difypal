@@ -16,6 +16,7 @@ Owns capabilities that must not be exposed to web content:
 - OS credential encryption/decryption
 - import/export file dialogs
 - protected network calls to a configured Dify Application API
+- spawning the isolated, pinned Graphon runtime sidecar
 - project and approval persistence
 
 IPC handlers use fixed channel names. The preload exposes methods rather than a
@@ -49,6 +50,17 @@ the validator.
 
 This boundary makes the critical behavior unit-testable in Node.
 
+### Standalone runtime sidecar
+
+`runtime-engine` consumes the official `graphon==0.5.3` package pinned by Dify
+main commit `7a111c22260bf41af38a1452a34a7b2cd16668e3`. It excludes Dify's Flask
+application, SQLAlchemy models, PostgreSQL, Redis, and Celery.
+
+Electron sends a single JSON request over stdin and receives a JSON result over
+stdout. The bridge maps Graphon node/graph events into the existing visible
+trace model. Hosted AI calls remain approval-gated; decrypted credentials are
+added only by Electron main immediately before the child process starts.
+
 ## Data flow
 
 ```mermaid
@@ -57,11 +69,13 @@ flowchart LR
   P --> V[Validation]
   P --> G[Graph model]
   P --> S[Safe simulator]
+  P --> X[Standalone Graphon]
   P --> D[Docs and tests]
   V --> H[Human approval]
   H --> E[Local export]
   H --> R[Dify Application API]
   H --> L[External LLM provider]
+  X --> H
 ```
 
 Hidden chain-of-thought is never displayed. Agent modules expose a plan summary,

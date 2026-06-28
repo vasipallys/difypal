@@ -71,9 +71,29 @@ test('creates, validates, visualizes, and approval-gates a workflow', async () =
     })
     await test.step('simulate with a visible trace', async () => {
       await window.locator('.tabs').getByRole('button', { name: 'Debugger' }).click()
+      await window.getByTestId('debug-inputs').fill(JSON.stringify({
+        input: 'x'.repeat(4_000),
+        rows: Array.from({ length: 120 }, (_, index) => ({ index, value: `row-${index}` })),
+      }, null, 2))
       await window.getByTestId('run-debugger').click()
       await expect(window.locator('.trace-status')).toHaveText('succeeded')
       await expect(window.locator('.trace-step')).toHaveCount(3)
+      const firstTraceDetails = window.locator('.trace-step details').first()
+      await firstTraceDetails.locator('summary').click()
+      const scrollMetrics = await firstTraceDetails.getByTestId('trace-json').evaluate(element => ({
+        clientHeight: element.clientHeight,
+        clientWidth: element.clientWidth,
+        overflowX: getComputedStyle(element).overflowX,
+        overflowY: getComputedStyle(element).overflowY,
+        scrollHeight: element.scrollHeight,
+        scrollWidth: element.scrollWidth,
+      }))
+      expect(scrollMetrics.overflowX).toBe('auto')
+      expect(scrollMetrics.overflowY).toBe('auto')
+      expect(scrollMetrics.scrollWidth).toBeGreaterThan(scrollMetrics.clientWidth)
+      expect(scrollMetrics.scrollHeight).toBeGreaterThan(scrollMetrics.clientHeight)
+      await window.locator('.mode-switch').getByRole('button', { name: 'Graphon' }).click()
+      await expect(window.getByTestId('engine-status')).toContainText('Graphon 0.5.3')
     })
     await test.step('approval gate export', async () => {
       await window.getByRole('button', { name: 'Export DSL' }).click()

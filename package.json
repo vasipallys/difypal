@@ -15,6 +15,8 @@
     "test:watch": "vitest",
     "test:e2e": "npm run build && playwright test",
     "check": "npm run typecheck && npm run test && npm run build",
+    "runtime:setup": "uv sync --project runtime-engine --frozen --python 3.13",
+    "runtime:test": "cd runtime-engine && uv run --frozen python -m pytest -q",
     "package": "npm run build && electron-builder",
     "package:dir": "npm run build && electron-builder --dir"
   },
@@ -63,6 +65,18 @@
       "dist/**/*",
       "dist-electron/**/*",
       "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "runtime-engine",
+        "to": "runtime-engine",
+        "filter": [
+          "dify_runtime_bridge/**/*",
+          "pyproject.toml",
+          "uv.lock",
+          "README.md"
+        ]
+      }
     ],
     "directories": {
       "output": "release"

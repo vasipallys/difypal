@@ -7,6 +7,7 @@ import { simulateDsl } from '@/core/runner/simulator'
 import { redactSecrets, redactText } from '@/core/security/redaction'
 import { createProvider } from '@/core/ai/providers'
 import { buildContentSecurityPolicy } from '@/core/security/csp'
+import { RuntimeEngineBridge } from './runtime-engine'
 import type { AIProfile, ApprovalRequest, DifyProfile, StudioProject } from '@/shared/types/desktop'
 
 if (process.env.DIFY_STUDIO_USER_DATA_DIR)
@@ -14,6 +15,7 @@ if (process.env.DIFY_STUDIO_USER_DATA_DIR)
 
 let mainWindow: BrowserWindow | null = null
 let storage: StorageService
+let standaloneRuntime: RuntimeEngineBridge
 
 function endpoint(baseUrl: string, path: string): string {
   const base = baseUrl.replace(/\/+$/, '')
@@ -126,6 +128,56 @@ function registerIpc(): void {
   ipcMain.handle('runtime:simulate', (_event, content: string, inputs: Record<string, unknown>, mocks: Record<string, unknown>) =>
     simulateDsl(content, inputs, mocks),
   )
+  ipcMain.handle('runtime:standalone-status', async () => {
+    try {
+      return await standaloneRuntime.status()
+    }
+    catch (error) {
+      throw new Error(redactText(error instanceof Error ? error.message : String(error)))
+    }
+  })
+  ipcMain.handle('runtime:run-standalone', async (
+    _event,
+    content: string,
+    inputs: Record<string, unknown>,
+    profileId?: string,
+  ) => {
+    try {
+      if (Buffer.byteLength(content, 'utf8') > 10 * 1024 * 1024)
+        throw new Error('DSL exceeds the 10 MB runtime limit.')
+      const profile = profileId ? storage.getProfile<AIProfile>(profileId, 'ai') : undefined
+      if (profileId && !profile)
+        throw new Error('AI profile not found.')
+      const runtimeProfile = profile
+        ? {
+            ...profile,
+            apiKey: storage.getProfileSecret(profile.id, 'ai') ?? undefined,
+          }
+        : undefined
+      return await standaloneRuntime.run({
+        dsl: content,
+        inputs,
+        profile: runtimeProfile,
+      })
+    }
+    catch (error) {
+      const message = redactText(error instanceof Error ? error.message : String(error))
+      const engine = await standaloneRuntime.status().catch(() => ({
+        available: false,
+        engine: 'graphon' as const,
+        engineVersion: 'unavailable',
+        pythonVersion: 'unavailable',
+        supportedPython: '>=3.12,<3.14',
+      }))
+      return {
+        status: 'failed' as const,
+        outputs: {},
+        trace: [],
+        warnings: [message],
+        engine,
+      }
+    }
+  })
   ipcMain.handle('runtime:generate-ai', async (_event, profileId: string, prompt: string) => {
     try {
       if (!prompt.trim())
@@ -244,6 +296,11 @@ app.whenReady().then(async () => {
     })
   })
   storage = new StorageService()
+  standaloneRuntime = new RuntimeEngineBridge(
+    app.isPackaged
+      ? join(process.resourcesPath, 'runtime-engine')
+      : join(app.getAppPath(), 'runtime-engine'),
+  )
   registerIpc()
   await createWindow()
 })

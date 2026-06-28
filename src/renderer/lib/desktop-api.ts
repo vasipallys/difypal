@@ -107,6 +107,8 @@ function browserApi(): DesktopApi {
     runtime: {
       validate: async content => validateDsl(content),
       simulate: async (content, inputs, mocks) => simulateDsl(content, inputs, mocks),
+      standaloneStatus: async () => { throw new Error('Standalone Graphon runtime requires the Electron desktop app.') },
+      runStandalone: async () => { throw new Error('Standalone Graphon runtime requires the Electron desktop app.') },
       generateAI: async () => { throw new Error('External AI generation requires the Electron desktop app.') },
       runDify: async () => { throw new Error('Real Dify execution requires the Electron desktop app.') },
       testDify: async () => ({ ok: false, message: 'Connection tests require the Electron desktop app.' }),
