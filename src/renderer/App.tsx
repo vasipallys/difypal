@@ -129,7 +129,7 @@ export default function App() {
   }
 
   const saveProject = async () => {
-    const name = state.parsed?.app?.name || project?.name || 'Untitled workflow'
+    const name = project?.name || state.parsed?.app?.name || 'Untitled workflow'
     const saved = await desktop.projects.save({
       ...project,
       name,
@@ -144,6 +144,19 @@ export default function App() {
       project: saved,
       projects: [saved, ...state.projects.filter(item => item.id !== saved.id)],
       notice: 'Project saved locally.',
+    })
+  }
+
+  const renameProject = async (id: string, name: string) => {
+    const existing = await desktop.projects.get(id)
+    if (!existing)
+      throw new Error('Project not found.')
+    const saved = await desktop.projects.save({ ...existing, name })
+    const current = useWorkspace.getState()
+    set({
+      project: current.project?.id === id ? saved : current.project,
+      projects: [saved, ...current.projects.filter(item => item.id !== id)],
+      notice: `Project renamed to ${saved.name}.`,
     })
   }
 
@@ -196,7 +209,7 @@ export default function App() {
 
   return (
     <div className="app-shell">
-      <Sidebar onNew={newProject} onUpload={upload} onOpen={openProject} />
+      <Sidebar onNew={newProject} onUpload={upload} onOpen={openProject} onRename={renameProject} />
       <main className="main-shell">
         {!settingsOnly && <WorkspaceHeader onSave={saveProject} onExport={exportDsl} />}
         <div className={showInspector ? 'workspace-body with-inspector' : 'workspace-body'}>

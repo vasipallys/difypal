@@ -1,9 +1,16 @@
-import Editor, { type Monaco, type OnMount } from '@monaco-editor/react'
+import Editor, { loader, type Monaco, type OnMount } from '@monaco-editor/react'
 import { Braces, WandSparkles } from 'lucide-react'
 import { useEffect, useRef } from 'react'
 import type { editor } from 'monaco-editor'
+import * as localMonaco from 'monaco-editor/esm/vs/editor/editor.api.js'
+import EditorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker'
 import { formatDsl } from '@/core/dsl/parser'
 import { useWorkspace } from '@/renderer/stores/workspace'
+
+self.MonacoEnvironment = {
+  getWorker: () => new EditorWorker(),
+}
+loader.config({ monaco: localMonaco as typeof import('monaco-editor') })
 
 export function EditorPane() {
   const { content, validation, set } = useWorkspace()

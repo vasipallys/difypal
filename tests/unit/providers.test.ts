@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createProvider } from '@/core/ai/providers'
-import { getProviderPreset, PROVIDER_PRESETS } from '@/core/ai/presets'
+import { getProviderPreset, isLoopbackAIProfile, PROVIDER_PRESETS } from '@/core/ai/presets'
 import type { ProviderConfig } from '@/core/ai/types'
 import type { ProviderType } from '@/shared/types/desktop'
 
@@ -38,6 +38,14 @@ describe('AI provider presets', () => {
     ])
     expect(getProviderPreset('kimi').baseUrl).toBe('https://api.moonshot.ai/v1')
     expect(getProviderPreset('lm-studio').local).toBe(true)
+  })
+
+  it('distinguishes loopback models from external provider endpoints', () => {
+    expect(isLoopbackAIProfile({ baseUrl: 'http://127.0.0.1:11434' })).toBe(true)
+    expect(isLoopbackAIProfile({ baseUrl: 'http://localhost:1234/v1' })).toBe(true)
+    expect(isLoopbackAIProfile({ baseUrl: 'http://[::1]:8080/v1' })).toBe(true)
+    expect(isLoopbackAIProfile({ baseUrl: 'https://api.openai.com/v1' })).toBe(false)
+    expect(isLoopbackAIProfile({ baseUrl: 'not a URL' })).toBe(false)
   })
 
   it.each(['openai', 'groq', 'kimi', 'lm-studio', 'openai-compatible'] as const)(

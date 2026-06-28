@@ -19,5 +19,7 @@ describe('safe simulation runner', () => {
     const result = simulateDsl('kind: app\nversion: 0.6.0\n', {}, {})
     expect(result.status).toBe('failed')
     expect(result.trace).toEqual([])
+    expect(result.warnings.length).toBeGreaterThan(0)
+    expect(result.warnings[0]).toMatch(/^\[[\w-]+\]/)
   })
 })

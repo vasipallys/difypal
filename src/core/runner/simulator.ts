@@ -159,11 +159,14 @@ export function simulateDsl(
 ): SimulationResult {
   const validation = validateDsl(content)
   if (!validation.valid) {
+    const blockingIssues = validation.issues.filter(item => item.severity === 'error')
     return {
       status: 'failed',
       outputs: {},
       trace: [],
-      warnings: validation.issues.filter(item => item.severity === 'error').map(item => item.message),
+      warnings: blockingIssues.map(item =>
+        `[${item.code}] ${item.message}${item.path ? ` (${item.path})` : ''}`,
+      ),
     }
   }
   const dsl = parseDsl(content).document as DifyDsl

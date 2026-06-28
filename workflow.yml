@@ -1,0 +1,98 @@
+version: 0.6.0
+kind: app
+app:
+  name: Simple LLM Q&A Workflow
+  mode: workflow
+  icon: "🤖"
+  icon_type: emoji
+  icon_background: "#FFE5E5"
+  description: A sample workflow that routes user queries to an LLM.
+  use_icon_as_answer_icon: false
+dependencies: []
+workflow:
+  conversation_variables: []
+  environment_variables: []
+  rag_pipeline_variables: []
+  features:
+    file_upload:
+      enabled: false
+  graph:
+    nodes:
+      - id: node_start
+        type: custom
+        position:
+          x: 80
+          y: 200
+        data:
+          type: start
+          title: Start
+          variables:
+            - variable: user_query
+              label: User Query
+              type: text-input
+              required: true
+              max_length: 256
+              options: []
+      - id: node_llm
+        type: custom
+        position:
+          x: 320
+          y: 200
+        data:
+          type: llm
+          title: LLM Processing
+          model:
+            provider: openai
+            name: gpt-4o
+            mode: chat
+            completion_params:
+              temperature: 0.7
+          prompt_template:
+            - role: system
+              text: You are a helpful assistant. Answer the user question concisely. If the answer is unknown, say so instead of guessing. Respond in plain text.
+            - role: user
+              text: "{{#node_start.user_query#}}"
+          prompt_config:
+            jinja2_variables: []
+          context:
+            enabled: false
+            variable_selector: []
+          vision:
+            enabled: false
+      - id: node_end
+        type: custom
+        position:
+          x: 560
+          y: 200
+        data:
+          type: end
+          title: End Response
+          outputs:
+            - variable: answer
+              value_selector:
+                - node_llm
+                - text
+              value_type: string
+    edges:
+      - id: start-to-llm
+        source: node_start
+        sourceHandle: source
+        target: node_llm
+        targetHandle: target
+        type: custom
+        data:
+          sourceType: start
+          targetType: llm
+      - id: llm-to-end
+        source: node_llm
+        sourceHandle: source
+        target: node_end
+        targetHandle: target
+        type: custom
+        data:
+          sourceType: llm
+          targetType: end
+    viewport:
+      x: 0
+      y: 0
+      zoom: 1

@@ -1,4 +1,4 @@
-import type { ProviderType } from '@/shared/types/desktop'
+import type { AIProfile, ProviderType } from '@/shared/types/desktop'
 
 export interface ProviderPreset {
   type: ProviderType
@@ -87,4 +87,18 @@ export const PROVIDER_PRESETS: readonly ProviderPreset[] = [
 
 export function getProviderPreset(type: ProviderType): ProviderPreset {
   return PROVIDER_PRESETS.find(preset => preset.type === type) ?? PROVIDER_PRESETS[0]
+}
+
+export function isLoopbackAIProfile(profile: Pick<AIProfile, 'baseUrl'>): boolean {
+  try {
+    const hostname = new URL(profile.baseUrl).hostname.toLowerCase()
+    return hostname === 'localhost'
+      || hostname === '::1'
+      || hostname === '[::1]'
+      || hostname === '0.0.0.0'
+      || hostname.startsWith('127.')
+  }
+  catch {
+    return false
+  }
 }

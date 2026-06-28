@@ -5,13 +5,18 @@ import {
   FileText,
   FolderKanban,
   History,
+  MoreHorizontal,
   Network,
+  Pencil,
   Plus,
+  Save,
   Settings2,
   ShieldCheck,
   TestTube2,
   Upload,
+  X,
 } from 'lucide-react'
+import { useState } from 'react'
 import type { WorkspaceTab } from '@/renderer/stores/workspace'
 import { useWorkspace } from '@/renderer/stores/workspace'
 
@@ -19,10 +24,41 @@ interface Props {
   onNew: () => void
   onUpload: () => void
   onOpen: (id: string) => void
+  onRename: (id: string, name: string) => Promise<void>
 }
 
-export function Sidebar({ onNew, onUpload, onOpen }: Props) {
+export function Sidebar({ onNew, onUpload, onOpen, onRename }: Props) {
   const { projects, project, activeTab, set } = useWorkspace()
+  const [menuProjectId, setMenuProjectId] = useState<string>()
+  const [editingProjectId, setEditingProjectId] = useState<string>()
+  const [draftName, setDraftName] = useState('')
+  const [renaming, setRenaming] = useState(false)
+
+  const beginRename = (id: string, name: string) => {
+    setMenuProjectId(undefined)
+    setEditingProjectId(id)
+    setDraftName(name)
+  }
+  const cancelRename = () => {
+    setEditingProjectId(undefined)
+    setDraftName('')
+  }
+  const submitRename = async (id: string) => {
+    const name = draftName.trim()
+    if (!name)
+      return
+    setRenaming(true)
+    try {
+      await onRename(id, name)
+      cancelRename()
+    }
+    catch (error) {
+      set({ notice: error instanceof Error ? error.message : String(error) })
+    }
+    finally {
+      setRenaming(false)
+    }
+  }
   const nav = (tab: WorkspaceTab, label: string, Icon: typeof Plus) => (
     <button className={activeTab === tab ? 'sidebar-link active' : 'sidebar-link'} onClick={() => set({ activeTab: tab })}>
       <Icon size={16} />
@@ -60,14 +96,47 @@ export function Sidebar({ onNew, onUpload, onOpen }: Props) {
       <div className="sidebar-section projects-list">
         <span className="sidebar-label"><FolderKanban size={13} /> Recent projects</span>
         {projects.slice(0, 6).map(item => (
-          <button
-            key={item.id}
-            className={project?.id === item.id ? 'project-link active' : 'project-link'}
-            onClick={() => onOpen(item.id)}
-          >
-            <span>{item.name}</span>
-            <small>{new Date(item.updatedAt).toLocaleDateString()}</small>
-          </button>
+          <div className={project?.id === item.id ? 'project-row active' : 'project-row'} key={item.id}>
+            {editingProjectId === item.id
+              ? (
+                  <form className="project-rename" onSubmit={(event) => { event.preventDefault(); void submitRename(item.id) }}>
+                    <input
+                      data-testid="rename-project-input"
+                      aria-label="New project name"
+                      autoFocus
+                      maxLength={120}
+                      value={draftName}
+                      onChange={event => setDraftName(event.target.value)}
+                    />
+                    <button type="submit" aria-label="Save project name" disabled={renaming || !draftName.trim()}><Save size={13} /></button>
+                    <button type="button" aria-label="Cancel project rename" onClick={cancelRename}><X size={13} /></button>
+                  </form>
+                )
+              : (
+                  <>
+                    <button
+                      className="project-link"
+                      onClick={() => { setMenuProjectId(undefined); onOpen(item.id) }}
+                    >
+                      <span>{item.name}</span>
+                      <small>{new Date(item.updatedAt).toLocaleDateString()}</small>
+                    </button>
+                    <button
+                      className="project-menu-trigger"
+                      aria-label={`Project actions for ${item.name}`}
+                      aria-expanded={menuProjectId === item.id}
+                      onClick={() => setMenuProjectId(current => current === item.id ? undefined : item.id)}
+                    >
+                      <MoreHorizontal size={15} />
+                    </button>
+                    {menuProjectId === item.id && (
+                      <div className="project-menu" role="menu">
+                        <button role="menuitem" onClick={() => beginRename(item.id, item.name)}><Pencil size={13} /> Rename</button>
+                      </div>
+                    )}
+                  </>
+                )}
+          </div>
         ))}
         {!projects.length && <p className="empty-mini">Your local projects will live here.</p>}
       </div>
