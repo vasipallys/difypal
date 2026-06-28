@@ -1,0 +1,69 @@
+version: 0.6.0
+kind: app
+app:
+  name: Local echo workflow
+  mode: workflow
+  icon: 🧭
+  icon_type: emoji
+  icon_background: '#E8F3FF'
+  description: A deterministic sample for parsing, graph checks, and simulation.
+  use_icon_as_answer_icon: false
+dependencies: []
+workflow:
+  conversation_variables: []
+  environment_variables: []
+  rag_pipeline_variables: []
+  features:
+    file_upload:
+      enabled: false
+  graph:
+    nodes:
+      - id: start
+        type: custom
+        position: { x: 80, y: 220 }
+        data:
+          type: start
+          title: User Input
+          variables:
+            - variable: input
+              label: Input
+              type: paragraph
+              required: true
+              max_length: 4096
+              options: []
+      - id: template
+        type: custom
+        position: { x: 390, y: 220 }
+        data:
+          type: template-transform
+          title: Echo
+          variables:
+            - variable: input
+              value_selector: [start, input]
+          template: 'Echo: {{#start.input#}}'
+      - id: end
+        type: custom
+        position: { x: 700, y: 220 }
+        data:
+          type: end
+          title: Output
+          outputs:
+            - variable: result
+              value_selector: [template, output]
+              value_type: string
+    edges:
+      - id: start-source-template-target
+        source: start
+        sourceHandle: source
+        target: template
+        targetHandle: target
+        type: custom
+        data: { sourceType: start, targetType: template-transform }
+      - id: template-source-end-target
+        source: template
+        sourceHandle: source
+        target: end
+        targetHandle: target
+        type: custom
+        data: { sourceType: template-transform, targetType: end }
+    viewport: { x: 0, y: 0, zoom: 1 }

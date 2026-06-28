@@ -1,0 +1,990 @@
+You are a senior full-stack architect, Electron desktop application expert, Dify core-code analyst, AI-agent workflow engineer, and prompt-engineering expert.
+
+Your task is to generate a complete end-to-end local desktop application called **Dify DSL Studio**.
+
+The application must help users create, edit, validate, debug, run, visualize, document, and test Dify DSL workflows locally from a laptop.
+
+The tool must deeply understand the official `langgenius/dify` codebase and derive DSL behavior from the real source code, not from assumptions.
+
+## 1. Source Repository Understanding
+
+Before generating application code, clone and inspect the official Dify repository.
+
+Use this repository placeholder:
+
+`https://github.com/langgenius/dify = official langgenius/dify GitHub repository`
+
+Analyze at minimum:
+
+1. DSL import/export services.
+2. App DSL service implementation.
+3. Workflow graph engine.
+4. Workflow/node models.
+5. Frontend workflow canvas implementation.
+6. Node type definitions.
+7. Workflow execution APIs.
+8. Workflow run/debug/logging implementation.
+9. App export/import compatibility handling.
+10. Current DSL version handling.
+11. Dify docs and examples available in the repo.
+12. Test fixtures, sample DSL files, and migration logic if present.
+
+Important files/directories to inspect and map:
+
+* `api/services/app_dsl_service.py`
+* `api/core/workflow`
+* `api/core/app`
+* `api/models`
+* `api/controllers`
+* `api/libs`
+* `web/app/components/workflow`
+* `web/app/components/base/workflow`
+* `web/app/components/workflow/nodes`
+* `web/service`
+* `web/types`
+* `docker`
+* official examples, fixtures, and tests
+
+Create an internal **Dify Compatibility Report** containing:
+
+* Supported DSL versions.
+* YAML structure.
+* Required top-level fields.
+* Supported app modes: workflow, chatflow, agent/chat assistant if applicable.
+* Supported node types.
+* Required node fields.
+* Required edge fields.
+* Variable reference format.
+* Environment variable format.
+* Model provider references.
+* Knowledge base references.
+* Tool/plugin references.
+* Secret handling rules.
+* Known version compatibility risks.
+* Import/export validation rules.
+* Any schema differences by Dify version.
+
+Do not hallucinate schema details. If something is unclear, inspect the Dify source code further and implement a compatibility adapter.
+
+## 2. Product Goal
+
+Build a standalone Electron desktop application that runs locally on Windows, macOS, and Linux.
+
+The application must allow the user to:
+
+1. Enter a natural-language requirement for an agent/workflow.
+2. Upload an existing Dify DSL YAML file.
+3. Create a new DSL from scratch.
+4. Update or refactor an existing DSL.
+5. Validate DSL syntax and semantic correctness.
+6. Debug workflow structure.
+7. Simulate or run workflow locally where possible.
+8. Optionally run against a configured Dify instance.
+9. Visualize the workflow as a graph.
+10. Generate documentation.
+11. Generate test cases.
+12. Auto-fix DSL issues with human approval.
+13. Compare versions.
+14. Export clean import-ready `.yml` / `.yaml` Dify DSL files.
+15. Store projects locally.
+
+## 3. Application Name
+
+Use the name:
+
+**Dify DSL Studio**
+
+Subtitle:
+
+**Local AI-powered editor, debugger, runner, visualizer, and test generator for Dify DSL workflows**
+
+## 4. Technology Stack
+
+Use the following stack unless there is a strong reason to improve it:
+
+### Desktop/UI
+
+* Electron
+* Vite
+* React
+* TypeScript
+* Tailwind CSS
+* shadcn/ui or equivalent clean component library
+* Monaco Editor for YAML/JSON editing
+* React Flow for workflow graph visualization
+* Zustand or Redux Toolkit for state management
+* TanStack Query for async state
+* Playwright for E2E tests
+
+### Local Backend/Core
+
+Use a modular local core inside the Electron app:
+
+* Node.js/TypeScript service layer
+* Worker threads for heavy parsing/validation
+* SQLite for project/history storage
+* Local file-system workspace
+* Encrypted secret storage using OS keychain where possible
+* YAML parser
+* JSON schema validation
+* Graph validation engine
+* Agent pipeline orchestrator
+
+Optional but useful:
+
+* Python FastAPI local service only if required for advanced AI or workflow execution
+* LangGraph or custom TypeScript graph orchestration for agentic pipelines
+
+### AI Provider Support
+
+The app must support AI configuration locally through settings:
+
+* OpenAI
+* Azure OpenAI
+* Anthropic Claude
+* Google Gemini
+* Groq
+* Ollama
+* LM Studio / OpenAI-compatible local endpoint
+* Kimi
+* Qwen
+* Any OpenAI-compatible endpoint
+
+Implement a provider abstraction:
+
+```ts
+interface LLMProvider {
+  id: string;
+  name: string;
+  type: "openai" | "anthropic" | "gemini" | "groq" | "ollama" | "openai-compatible";
+  validateConfig(): Promise<ValidationResult>;
+  generate(prompt: string, options: GenerateOptions): Promise<LLMResponse>;
+  stream(prompt: string, options: GenerateOptions): AsyncIterable<LLMChunk>;
+}
+```
+
+Never hardcode API keys.
+
+Use `.env.local` and encrypted settings.
+
+## 5. Core User Journeys
+
+Implement these main journeys.
+
+### Journey A: Requirement to Dify DSL
+
+User provides:
+
+* Agent/workflow requirement
+* App type: workflow/chatflow
+* Preferred model provider
+* Inputs
+* Expected output
+* Tools/APIs
+* Knowledge/RAG requirements
+* Human approval points
+* Error handling requirements
+
+System must:
+
+1. Clarify missing requirements if needed.
+2. Generate a workflow plan.
+3. Generate Dify DSL YAML.
+4. Validate YAML.
+5. Render graph.
+6. Generate documentation.
+7. Generate tests.
+8. Ask human approval before final export.
+9. Export import-ready Dify DSL.
+
+### Journey B: Upload Existing DSL
+
+User uploads `.yml` or `.yaml`.
+
+System must:
+
+1. Parse YAML.
+2. Detect Dify DSL version.
+3. Validate syntax.
+4. Validate semantic graph.
+5. Show visual workflow.
+6. Show node-by-node explanation.
+7. Show issues, warnings, and improvement suggestions.
+8. Allow auto-fix with approval.
+9. Generate documentation and tests.
+10. Export improved DSL.
+
+### Journey C: Create New DSL Manually
+
+User starts blank.
+
+System must provide:
+
+1. DSL editor.
+2. Node palette.
+3. Graph canvas.
+4. Form-based node editor.
+5. YAML editor synced with graph.
+6. Validation panel.
+7. Preview/debug panel.
+8. Export button.
+
+### Journey D: Update Existing DSL
+
+User asks:
+
+* Add a node
+* Change model
+* Add IF/ELSE
+* Add RAG
+* Add tool call
+* Add approval step
+* Improve prompt
+* Add fallback
+* Add retry
+* Add error handling
+* Optimize workflow
+
+System must:
+
+1. Understand requested change.
+2. Create modification plan.
+3. Show diff.
+4. Validate impact.
+5. Ask human approval.
+6. Apply changes.
+7. Revalidate.
+8. Regenerate docs and tests.
+
+### Journey E: Debug and Run
+
+The app must support:
+
+1. Static validation.
+2. Graph validation.
+3. Variable lineage validation.
+4. Node input/output inspection.
+5. Simulated execution with mock node outputs.
+6. Optional real execution against configured Dify API.
+7. Step-by-step trace viewer.
+8. Breakpoints.
+9. Node-level logs.
+10. Failure explanation.
+11. Suggested fixes.
+
+## 6. UI Layout
+
+Create a professional desktop UI with these sections.
+
+### Left Sidebar
+
+* Projects
+* New from Requirement
+* Upload DSL
+* Blank DSL
+* Recent DSLs
+* Templates
+* AI Settings
+* Dify Instance Settings
+* Documentation
+* Test Suites
+
+### Main Workspace Tabs
+
+1. **Requirement**
+
+   * Natural-language requirement input
+   * App type selector
+   * Model/provider selector
+   * Knowledge/tool settings
+   * Generate workflow button
+
+2. **DSL Editor**
+
+   * Monaco YAML editor
+   * Syntax highlighting
+   * Auto-complete based on extracted Dify DSL schema
+   * Inline errors
+   * Format YAML
+   * Diff mode
+
+3. **Visual Workflow**
+
+   * React Flow canvas
+   * Nodes
+   * Edges
+   * Layout auto-arrange
+   * Node details drawer
+   * Edge details drawer
+
+4. **Debugger**
+
+   * Inputs
+   * Run mode: simulate / Dify API
+   * Step execution
+   * Node trace
+   * Logs
+   * Errors
+   * Breakpoints
+
+5. **Validation**
+
+   * Syntax checks
+   * Schema checks
+   * Semantic checks
+   * Graph checks
+   * Variable checks
+   * Security checks
+   * Version compatibility checks
+
+6. **Documentation**
+
+   * Auto-generated markdown
+   * App overview
+   * Workflow description
+   * Node catalog
+   * Variable catalog
+   * Prompt catalog
+   * Model config
+   * Deployment notes
+   * Risks and limitations
+
+7. **Test Cases**
+
+   * Test case generator
+   * Golden path tests
+   * Edge case tests
+   * Negative tests
+   * Variable tests
+   * Graph integrity tests
+   * Import compatibility tests
+   * Export test artifacts
+
+8. **AI Review**
+
+   * Planner output
+   * Critic output
+   * Repair suggestions
+   * Human approval queue
+   * Decision history
+
+### Right Panel
+
+* Current selected node
+* YAML path
+* Variables used
+* Inputs
+* Outputs
+* Prompt preview
+* Validation status
+* AI suggestions
+* Apply fix button
+
+## 7. Agentic AI Pipeline
+
+Implement an agentic pipeline with private reasoning and visible summaries.
+
+Do not expose hidden chain-of-thought. Instead, show:
+
+* Plan summary
+* Validation findings
+* Proposed fixes
+* Confidence score
+* Risks
+* Required approvals
+
+Create these agents/modules:
+
+### 1. Requirement Analyst Agent
+
+Input: user requirement
+Output:
+
+* App type
+* Goal
+* Inputs
+* Outputs
+* Required nodes
+* Required integrations
+* Required approvals
+* Error paths
+* Test scenarios
+
+### 2. Dify DSL Architect Agent
+
+Input: requirement analysis
+Output:
+
+* Workflow graph design
+* Node list
+* Edge list
+* Variable map
+* Prompt strategy
+* Tool/RAG strategy
+* Human approval points
+
+### 3. DSL Generator Agent
+
+Input: workflow graph design
+Output:
+
+* Valid Dify DSL YAML
+* Node configs
+* Edges
+* Variables
+* Metadata
+* Model placeholders
+* Tool placeholders
+
+### 4. DSL Validator Agent
+
+Input: DSL YAML
+Output:
+
+* Syntax errors
+* Schema errors
+* Semantic errors
+* Graph errors
+* Variable reference errors
+* Missing configuration
+* Compatibility warnings
+
+### 5. Workflow Visualizer Agent
+
+Input: DSL
+Output:
+
+* React Flow graph model
+* Node grouping
+* Layout hints
+* Edge labels
+* Node explanations
+
+### 6. Debugger Agent
+
+Input: DSL + test input
+Output:
+
+* Simulated execution trace
+* Node input/output mapping
+* Potential runtime failures
+* Suggested fixes
+
+### 7. Documentation Agent
+
+Input: DSL + analysis
+Output:
+
+* Markdown documentation
+* Functional summary
+* Technical summary
+* Node-by-node details
+* Runbook
+* Troubleshooting guide
+
+### 8. Testcase Generator Agent
+
+Input: DSL + requirement
+Output:
+
+* Functional tests
+* DSL validation tests
+* Graph tests
+* Prompt tests
+* Runtime simulation tests
+* Import/export tests
+* E2E UI tests
+
+### 9. Critic Agent
+
+Input: generated DSL + docs + tests
+Output:
+
+* Design review
+* Reliability review
+* Security review
+* Maintainability review
+* Dify compatibility review
+* Prompt quality review
+
+### 10. Repair Agent
+
+Input: critic findings
+Output:
+
+* Proposed patches
+* YAML diff
+* Explanation
+* Approval request
+
+### 11. Human Approval Gate
+
+Must pause before:
+
+* Applying AI-generated changes.
+* Exporting final DSL.
+* Running against a real Dify instance.
+* Sending data to external AI provider.
+* Saving secrets.
+* Deleting or overwriting files.
+
+## 8. Validation Rules
+
+Implement these validation categories.
+
+### YAML Validation
+
+* Valid YAML syntax.
+* No duplicate keys.
+* Required top-level fields.
+* Correct scalar/list/map types.
+* No invalid indentation.
+* No unresolved placeholders unless explicitly allowed.
+
+### Dify DSL Schema Validation
+
+Derived from the Dify source code.
+
+Validate:
+
+* DSL version.
+* App metadata.
+* App mode.
+* Workflow graph.
+* Nodes.
+* Edges.
+* Variables.
+* Model config.
+* Tool config.
+* Knowledge config.
+* Environment variables.
+* Conversation variables if chatflow.
+* Start node.
+* End/answer/output nodes.
+
+### Graph Validation
+
+Check:
+
+* Start node exists.
+* No orphan nodes.
+* No broken edges.
+* No missing source/target.
+* No invalid cycles unless Dify supports them for that node type.
+* Branch nodes have proper branches.
+* Iteration/loop nodes are structurally valid.
+* Every execution path ends correctly.
+* Node IDs are unique.
+* Edge IDs are unique.
+* Node coordinates are valid for canvas.
+
+### Variable Validation
+
+Check:
+
+* Variable references exist.
+* Input variables are defined.
+* Output variables are consumed correctly.
+* System variables are valid.
+* Node output paths are valid.
+* Type compatibility is reasonable.
+* Prompt templates use valid variables.
+
+### Security Validation
+
+Check:
+
+* No hardcoded API keys.
+* No secrets in exported docs.
+* Secret variables masked.
+* Local logs redact secrets.
+* External AI calls require user consent.
+* Real Dify execution requires explicit approval.
+* Uploaded DSL is treated as untrusted input.
+* Code nodes are not executed unsafely.
+* Electron uses secure defaults.
+
+### Compatibility Validation
+
+Check:
+
+* Dify version compatibility.
+* Deprecated fields.
+* Missing fields.
+* Plugin/model compatibility.
+* Knowledge references that cannot be exported.
+* Secrets excluded from export.
+* Import warnings.
+
+## 9. Local Runner and Debugger
+
+Implement two run modes.
+
+### Mode 1: Simulation Runner
+
+Runs locally without Dify.
+
+Capabilities:
+
+* Accept user input variables.
+* Traverse graph.
+* Execute deterministic nodes where possible.
+* Mock LLM nodes.
+* Mock HTTP/tool/knowledge nodes.
+* Allow user to provide mock responses.
+* Generate execution trace.
+* Detect missing variables and broken paths.
+
+Do not claim full Dify runtime equivalence. Clearly label as simulation.
+
+### Mode 2: Dify API Runner
+
+Runs against a configured Dify instance.
+
+Settings:
+
+* Dify base URL
+* API key
+* App ID if needed
+* Environment
+* Timeout
+* Streaming on/off
+
+Before running:
+
+* Show what data will be sent.
+* Ask user approval.
+* Redact secrets in logs.
+
+## 10. Documentation Generation
+
+For every DSL, generate:
+
+1. README-style overview.
+2. Functional requirement summary.
+3. Workflow diagram summary.
+4. Node-by-node documentation.
+5. Variable catalog.
+6. Prompt catalog.
+7. Model/provider catalog.
+8. Tool/API dependency list.
+9. Knowledge base dependency list.
+10. Error handling paths.
+11. Human approval points.
+12. Security notes.
+13. Deployment/import instructions.
+14. Test plan.
+15. Troubleshooting guide.
+16. Changelog.
+
+Documentation must be exportable as:
+
+* Markdown
+* HTML
+* PDF if practical
+
+## 11. Test Case Generation
+
+Generate tests for:
+
+### DSL Tests
+
+* YAML parse test.
+* Schema validation test.
+* Required fields test.
+* Import compatibility test.
+* Export round-trip test.
+
+### Graph Tests
+
+* Start node test.
+* End path test.
+* Edge integrity test.
+* Orphan node test.
+* Branch test.
+* Variable lineage test.
+
+### Functional Tests
+
+* Golden path.
+* Empty input.
+* Invalid input.
+* Long input.
+* Missing file.
+* Failed retrieval.
+* Failed tool call.
+* LLM refusal path.
+* Human approval rejected path.
+* Timeout path.
+
+### UI Tests
+
+Use Playwright:
+
+* Open app.
+* Create project.
+* Paste requirement.
+* Generate DSL.
+* Upload DSL.
+* Validate DSL.
+* View graph.
+* Generate docs.
+* Generate tests.
+* Export DSL.
+
+### Unit Tests
+
+Use Vitest/Jest:
+
+* YAML parser.
+* Schema validator.
+* Graph converter.
+* AI provider adapter.
+* Project storage.
+* Secret redaction.
+* Diff engine.
+* Approval workflow.
+
+## 12. Project Structure
+
+Generate a clean repository like this:
+
+```txt
+dify-dsl-studio/
+  package.json
+  README.md
+  .env.example
+  electron/
+    main/
+    preload/
+  src/
+    renderer/
+      app/
+      components/
+      pages/
+      features/
+      stores/
+      styles/
+    core/
+      dsl/
+      validation/
+      graph/
+      agents/
+      ai/
+      runner/
+      docs/
+      tests-generator/
+      storage/
+      security/
+      dify/
+    shared/
+      types/
+      constants/
+      utils/
+  tests/
+    unit/
+    integration/
+    e2e/
+  samples/
+    requirements/
+    dsl/
+  docs/
+    architecture.md
+    local-setup.md
+    dify-compatibility.md
+    security.md
+```
+
+Keep files modular.
+
+Prefer files under 400 lines where practical.
+
+## 13. Required Implementation Details
+
+Implement actual working code, not only pseudo-code.
+
+Include:
+
+1. Electron main process.
+2. Secure preload bridge.
+3. React renderer app.
+4. Monaco YAML editor.
+5. React Flow graph viewer.
+6. YAML parser.
+7. DSL validation engine.
+8. Graph conversion engine.
+9. AI provider abstraction.
+10. At least OpenAI-compatible, Gemini, Groq, Anthropic, and Ollama adapters.
+11. Local settings screen.
+12. Project create/open/save.
+13. File upload/import.
+14. Export DSL.
+15. Documentation generator.
+16. Testcase generator.
+17. Simulation runner.
+18. Approval workflow.
+19. Secret redaction.
+20. Error boundary.
+21. Logging.
+22. Unit tests.
+23. E2E tests.
+24. README with setup/run/package instructions.
+
+## 14. AI Configuration Screen
+
+Create a settings screen where the user can configure:
+
+* Provider type
+* Base URL
+* API key
+* Model name
+* Temperature
+* Max tokens
+* Timeout
+* Streaming
+* Test connection button
+* Save encrypted credentials
+* Redact secrets button
+
+Support multiple named profiles:
+
+* Local Ollama
+* OpenAI
+* Gemini
+* Groq
+* Claude
+* Kimi
+* Qwen
+* Custom OpenAI-compatible
+
+## 15. Dify Instance Configuration
+
+Create a separate settings screen for optional Dify runtime:
+
+* Dify base URL
+* API key
+* Workspace/app info if needed
+* Test connection
+* Import DSL check if API supports it
+* Run workflow if API supports it
+* Export/import compatibility check
+
+Do not require a Dify server for local editing and simulation.
+
+## 16. Human Approval Workflow
+
+Implement approval queue with statuses:
+
+* Pending
+* Approved
+* Rejected
+* Applied
+* Failed
+
+For each proposed AI change, show:
+
+* Summary
+* Risk level
+* Files affected
+* YAML diff
+* Before/after graph impact
+* Validation result
+* Apply button
+* Reject button
+
+Never auto-apply destructive changes.
+
+## 17. Prompt Quality Requirements
+
+The generated app must help improve prompts inside Dify DSL.
+
+Implement prompt review checks:
+
+* Clear role
+* Clear task
+* Clear input variables
+* Clear output format
+* Guardrails
+* Citation/reference requirement if needed
+* JSON schema if structured output is expected
+* Hallucination-risk warning
+* Missing fallback
+* Too-broad instruction warning
+* Missing refusal policy where relevant
+
+## 18. Acceptance Criteria
+
+The app is complete only when all are true:
+
+1. Runs locally with `npm install` and `npm run dev`.
+2. Electron window opens successfully.
+3. User can create a project.
+4. User can paste a requirement and generate a DSL draft.
+5. User can upload a Dify DSL YAML file.
+6. YAML editor works.
+7. Visual graph renders from DSL.
+8. Validation panel shows real issues.
+9. Documentation can be generated.
+10. Test cases can be generated.
+11. Simulation runner produces a node trace.
+12. AI settings can be configured.
+13. Human approval gate works.
+14. Export produces a `.yml` file.
+15. Unit tests pass.
+16. E2E smoke test passes.
+17. README explains setup, usage, architecture, and limitations.
+18. No API keys are hardcoded.
+19. Secrets are redacted from logs.
+20. Code is modular and maintainable.
+
+## 19. Output Format Required From You
+
+Generate the complete application repository.
+
+Your response must include:
+
+1. Architecture summary.
+2. Final folder structure.
+3. Complete source code for all files.
+4. Setup instructions.
+5. Run instructions.
+6. Packaging instructions.
+7. Testing instructions.
+8. Security notes.
+9. Known limitations.
+10. Future enhancements.
+
+When writing code:
+
+* Use TypeScript.
+* Use strict typing.
+* Use clear interfaces.
+* Add useful comments only where needed.
+* Add error handling.
+* Add tests.
+* Keep modules clean.
+* Avoid over-engineering.
+* Do not hardcode secrets.
+* Do not expose private reasoning.
+* Show concise decision summaries instead.
+
+## 20. Important Behavior Rules
+
+Follow these rules strictly:
+
+1. First inspect Dify source code and derive compatibility details.
+2. Never invent Dify DSL schema when source code can be checked.
+3. If uncertain, create a compatibility layer and mark the uncertainty.
+4. Make local editing work without internet.
+5. Make AI features optional.
+6. Make real Dify execution optional.
+7. Ask approval before external AI calls if sensitive DSL/content is present.
+8. Ask approval before running against Dify API.
+9. Ask approval before applying AI fixes.
+10. Keep user data local by default.
+11. Redact secrets everywhere.
+12. Generate import-ready Dify DSL.
+13. Generate clear documentation and test cases.
+14. Provide a production-quality developer experience.
+
+Now generate the full end-to-end implementation for **Dify DSL Studio**.
