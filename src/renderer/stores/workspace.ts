@@ -8,6 +8,9 @@ import type {
   ApiRuntimeStatus,
 } from '@/shared/types/desktop'
 import type { DifyDsl, SimulationResult, ValidationResult } from '@/shared/types/dsl'
+import type { WorkspaceTheme } from '@/renderer/lib/themes'
+import { loadWorkspaceTheme } from '@/renderer/lib/themes'
+import type { DslReviewReport } from '@/core/agents/dsl-review'
 
 export type WorkspaceTab =
   | 'requirement'
@@ -40,6 +43,7 @@ interface WorkspaceStore {
   generatedTests: string
   proposedDsl?: string
   fixApprovalId?: string
+  aiDslReview?: DslReviewReport
   debuggerLaunch?: DebuggerLaunchRequest
   apiRuntime?: ApiRuntimeStatus
   selectedNodeId?: string
@@ -49,6 +53,7 @@ interface WorkspaceStore {
   difyProfiles: DifyProfile[]
   busy: boolean
   notice?: string
+  theme: WorkspaceTheme
   set: (patch: Partial<WorkspaceStore>) => void
 }
 
@@ -63,5 +68,6 @@ export const useWorkspace = create<WorkspaceStore>(set => ({
   aiProfiles: [],
   difyProfiles: [],
   busy: false,
+  theme: loadWorkspaceTheme(),
   set,
 }))

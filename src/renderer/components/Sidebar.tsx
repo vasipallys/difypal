@@ -7,6 +7,7 @@ import {
   History,
   MoreHorizontal,
   Network,
+  Palette,
   Pencil,
   Play,
   Plus,
@@ -19,6 +20,7 @@ import {
   X,
 } from 'lucide-react'
 import { useState } from 'react'
+import { workspaceThemes, type WorkspaceTheme } from '@/renderer/lib/themes'
 import type { WorkspaceTab } from '@/renderer/stores/workspace'
 import { useWorkspace } from '@/renderer/stores/workspace'
 
@@ -33,7 +35,7 @@ interface Props {
 }
 
 export function Sidebar({ onNew, onBlank, onUpload, onOpen, onRename, onRun, onStop }: Props) {
-  const { projects, project, activeTab, busy, apiRuntime, set } = useWorkspace()
+  const { projects, project, activeTab, busy, apiRuntime, theme, set } = useWorkspace()
   const [menuProjectId, setMenuProjectId] = useState<string>()
   const [editingProjectId, setEditingProjectId] = useState<string>()
   const [draftName, setDraftName] = useState('')
@@ -167,6 +169,19 @@ export function Sidebar({ onNew, onBlank, onUpload, onOpen, onRename, onRun, onS
       </div>
 
       <div className="sidebar-bottom">
+        <div className="theme-picker">
+          <label htmlFor="workspace-theme"><Palette size={13} /> Theme</label>
+          <select
+            id="workspace-theme"
+            data-testid="workspace-theme"
+            value={theme}
+            onChange={event => set({ theme: event.target.value as WorkspaceTheme })}
+          >
+            {workspaceThemes.map(option => (
+              <option value={option.id} key={option.id}>{option.label}</option>
+            ))}
+          </select>
+        </div>
         {nav('ai-settings', 'AI settings', Settings2)}
         {nav('dify-settings', 'Dify instance', History)}
         {nav('compatibility', 'Compatibility', ShieldCheck)}

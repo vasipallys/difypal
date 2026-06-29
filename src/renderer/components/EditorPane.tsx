@@ -13,7 +13,7 @@ self.MonacoEnvironment = {
 loader.config({ monaco: localMonaco as typeof import('monaco-editor') })
 
 export function EditorPane() {
-  const { content, validation, set } = useWorkspace()
+  const { content, validation, theme, set } = useWorkspace()
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null)
   const monacoRef = useRef<Monaco | null>(null)
 
@@ -58,7 +58,7 @@ export function EditorPane() {
       <Editor
         height="100%"
         language="yaml"
-        theme="vs-dark"
+        theme={theme === 'daylight' ? 'vs' : 'vs-dark'}
         value={content}
         onChange={value => set({ content: value ?? '' })}
         onMount={onMount}

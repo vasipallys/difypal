@@ -1,16 +1,23 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
+import {
+  buildDslReviewPrompt,
+  fingerprint,
+  parseDslReviewResponse,
+} from '@/core/agents/dsl-review'
 import { parseDsl } from '@/core/dsl/parser'
 import { isLoopbackAIProfile } from '@/core/ai/presets'
 import { createStarterDsl, type StarterTemplateId } from '@/core/dsl/starter-templates'
 import { generateDocumentation } from '@/core/docs/generator'
 import { generateTestPlan } from '@/core/tests-generator/generator'
 import { desktop } from '@/renderer/lib/desktop-api'
+import { saveWorkspaceTheme } from '@/renderer/lib/themes'
 import { useWorkspace } from '@/renderer/stores/workspace'
 import { Sidebar } from '@/renderer/components/Sidebar'
 import { WorkspaceHeader } from '@/renderer/components/WorkspaceHeader'
 import { Inspector } from '@/renderer/components/Inspector'
 import { ApprovalPrompt } from '@/renderer/components/ApprovalPrompt'
 import { BlankDslModal } from '@/renderer/components/BlankDslModal'
+import { UploadReviewModal } from '@/renderer/components/UploadReviewModal'
 import { RequirementPage } from '@/renderer/pages/RequirementPage'
 import { ValidationPage } from '@/renderer/pages/ValidationPage'
 import { DebuggerPage } from '@/renderer/pages/DebuggerPage'
@@ -31,8 +38,9 @@ const WorkflowGraph = lazy(async () => {
 
 export default function App() {
   const state = useWorkspace()
-  const { activeTab, content, project, notice, set } = state
+  const { activeTab, content, project, notice, theme, set } = state
   const [showBlankDsl, setShowBlankDsl] = useState(false)
+  const [uploadReviewName, setUploadReviewName] = useState<string>()
 
   const refresh = async () => {
     const [projects, aiProfiles, difyProfiles, approvals, apiRuntime] = await Promise.all([
@@ -48,6 +56,11 @@ export default function App() {
   useEffect(() => {
     void refresh()
   }, [])
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme
+    saveWorkspaceTheme(theme)
+  }, [theme])
 
   useEffect(() => {
     const timer = setTimeout(async () => {
@@ -73,6 +86,7 @@ export default function App() {
 
   const newProject = () => {
     setShowBlankDsl(false)
+    setUploadReviewName(undefined)
     set({
       project: undefined,
       content: '',
@@ -84,6 +98,7 @@ export default function App() {
       generatedTests: '',
       proposedDsl: undefined,
       fixApprovalId: undefined,
+      aiDslReview: undefined,
       approvalPromptId: undefined,
       debuggerLaunch: undefined,
       activeTab: 'requirement',
@@ -109,6 +124,7 @@ export default function App() {
         generatedTests: parsed ? generateTestPlan(parsed) : '',
         proposedDsl: undefined,
         fixApprovalId: undefined,
+        aiDslReview: undefined,
         approvalPromptId: undefined,
         debuggerLaunch: undefined,
         activeTab: 'visual',
@@ -264,16 +280,98 @@ export default function App() {
       requirement: '',
       documentation: '',
       generatedTests: '',
+      aiDslReview: undefined,
       debuggerLaunch: undefined,
       activeTab: 'editor',
       notice: `Imported ${name}.`,
     })
   }
 
+  const runAiDslReview = async (profileId: string) => {
+    const current = useWorkspace.getState()
+    const profile = current.aiProfiles.find(item => item.id === profileId)
+    if (!profile) {
+      set({ notice: 'The selected AI profile no longer exists.' })
+      return
+    }
+    if (!current.content.trim()) {
+      set({ notice: 'Upload or open a DSL before requesting AI review.' })
+      return
+    }
+
+    const reviewFingerprint = fingerprint(`${profile.id}:${profile.model}:${current.content}`)
+    const title = `Review uploaded DSL with ${profile.name} [${reviewFingerprint}]`
+    let approvalId: string | undefined
+    if (!isLoopbackAIProfile(profile)) {
+      const approved = current.approvals.find(item =>
+        item.action === 'external-ai'
+        && item.title === title
+        && item.status === 'approved',
+      )
+      if (approved) {
+        approvalId = approved.id
+      }
+      else {
+        const pending = current.approvals.find(item =>
+          item.action === 'external-ai'
+          && item.title === title
+          && item.status === 'pending',
+        )
+        const request = pending ?? await desktop.approvals.create({
+          projectId: current.project?.id,
+          action: 'external-ai',
+          title,
+          summary: `Send the currently uploaded DSL YAML and local validation findings to ${profile.name} (${profile.model}) for a structured review and patch suggestions.`,
+          risk: 'high',
+        })
+        set({
+          approvals: pending ? current.approvals : [request, ...current.approvals],
+          approvalPromptId: request.id,
+          notice: 'Approve the AI DSL review, then click Review with AI again.',
+        })
+        return
+      }
+    }
+
+    set({ busy: true, notice: `Reviewing DSL with ${profile.name}…` })
+    try {
+      const validation = await desktop.runtime.validate(current.content)
+      const response = await desktop.runtime.generateAI(profile.id, buildDslReviewPrompt(current.content, validation))
+      const report = parseDslReviewResponse(response.text, response.model)
+      let nextApprovals = useWorkspace.getState().approvals
+      if (approvalId) {
+        const applied = await desktop.approvals.decide(approvalId, 'applied')
+        nextApprovals = nextApprovals.map(item => item.id === approvalId ? applied : item)
+      }
+      setUploadReviewName(undefined)
+      set({
+        aiDslReview: report,
+        approvals: nextApprovals,
+        validation,
+        busy: false,
+        activeTab: 'review',
+        notice: 'AI DSL review completed. Select suggestions to apply.',
+      })
+    }
+    catch (error) {
+      if (approvalId) {
+        const failed = await desktop.approvals.decide(approvalId, 'failed')
+        set({
+          approvals: useWorkspace.getState().approvals.map(item => item.id === approvalId ? failed : item),
+        })
+      }
+      set({
+        busy: false,
+        notice: error instanceof Error ? error.message : String(error),
+      })
+    }
+  }
+
   const upload = async () => {
     const imported = await desktop.files.importDsl()
     if (imported) {
       applyImported(imported.content, imported.path.split(/[\\/]/).pop() ?? 'DSL')
+      setUploadReviewName(imported.path.split(/[\\/]/).pop() ?? 'DSL')
       return
     }
     if (desktop.platform === 'browser') {
@@ -282,8 +380,10 @@ export default function App() {
       input.accept = '.yml,.yaml,application/yaml,text/yaml'
       input.onchange = async () => {
         const file = input.files?.[0]
-        if (file)
+        if (file) {
           applyImported(await file.text(), file.name)
+          setUploadReviewName(file.name)
+        }
       }
       input.click()
     }
@@ -403,6 +503,19 @@ export default function App() {
         <BlankDslModal
           onClose={() => setShowBlankDsl(false)}
           onSelect={templateId => void createBlankDsl(templateId)}
+        />
+      )}
+      {uploadReviewName && (
+        <UploadReviewModal
+          fileName={uploadReviewName}
+          aiProfiles={state.aiProfiles}
+          busy={state.busy}
+          onClose={() => setUploadReviewName(undefined)}
+          onReview={profileId => void runAiDslReview(profileId)}
+          onConfigureAI={() => {
+            setUploadReviewName(undefined)
+            set({ activeTab: 'ai-settings', notice: 'Configure an AI profile, then upload or review the DSL again.' })
+          }}
         />
       )}
       <ApprovalPrompt />
