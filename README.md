@@ -11,6 +11,10 @@ The compatibility profile in this repository is derived from official Dify
 commit `7a111c22260bf41af38a1452a34a7b2cd16668e3` and its pinned
 `graphon==0.5.3` runtime. The current app DSL version at that commit is `0.6.0`.
 See [Dify compatibility](docs/dify-compatibility.md) for evidence and caveats.
+![alt text](image.png)
+
+![alt text](image-1.png)
+
 
 ## What works
 
