@@ -51,6 +51,7 @@ class HttpProfileLLM:
             **dict(parameters or {}),
         }
         self._stop: Sequence[str] | None = None
+        self._last_prompt_messages: list[dict[str, str]] = []
 
     @property
     def provider(self) -> str:
@@ -71,6 +72,10 @@ class HttpProfileLLM:
     @property
     def stop(self) -> Sequence[str] | None:
         return self._stop
+
+    @property
+    def last_prompt_messages(self) -> list[dict[str, str]]:
+        return [dict(message) for message in self._last_prompt_messages]
 
     def get_model_schema(self) -> AIModelEntity:
         return AIModelEntity(
@@ -122,6 +127,7 @@ class HttpProfileLLM:
             raise RuntimeError(
                 "Tool calling requires the official Dify Slim plugin runtime."
             )
+        self._last_prompt_messages = self._messages(prompt_messages)
         text = self._request(
             prompt_messages=prompt_messages,
             model_parameters=model_parameters,
@@ -173,6 +179,7 @@ class HttpProfileLLM:
             ),
         })
         messages = [*prompt_messages, schema_prompt]
+        self._last_prompt_messages = self._messages(messages)
         text = self._request(
             prompt_messages=messages,
             model_parameters=model_parameters,

@@ -8,14 +8,20 @@ describe('DSL validator', () => {
   it('accepts the generated workflow draft', () => {
     const dsl = generateDraftFromRequirement('Summarize the supplied input accurately.', 'workflow')
     const result = validateDsl(dsl)
+    const document = parseDsl(dsl).document!
+    const llm = document.workflow!.graph.nodes.find(node => node.data.type === 'llm')!
+    const prompt = llm.data.prompt_template as Array<{ role: string; text: string }>
     expect(result.valid).toBe(true)
     expect(result.version).toBe('0.6.0')
     expect(result.issues.filter(issue => issue.severity === 'error')).toEqual([])
+    expect(document.workflow!.graph.nodes.every(node => /^[a-zA-Z0-9_]{1,50}$/.test(node.id))).toBe(true)
+    expect(prompt.find(message => message.role === 'system')?.text).toContain('already-running Dify workflow')
+    expect(prompt.find(message => message.role === 'user')?.text).toMatch(/\{\{#start_[a-z0-9]+\.input#\}\}/)
   })
 
   it('finds broken edge endpoints and duplicate IDs', () => {
     const dsl = generateDraftFromRequirement('Return a useful answer.', 'workflow')
-      .replace(/target: end-[a-z0-9]+/, 'target: missing-node')
+      .replace(/target: end_[a-z0-9]+/, 'target: missing-node')
     const result = validateDsl(dsl)
     expect(result.issues.some(issue => issue.code === 'edge-target')).toBe(true)
   })

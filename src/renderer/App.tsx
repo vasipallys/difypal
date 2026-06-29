@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect } from 'react'
 import { parseDsl } from '@/core/dsl/parser'
+import { isLoopbackAIProfile } from '@/core/ai/presets'
 import { desktop } from '@/renderer/lib/desktop-api'
 import { useWorkspace } from '@/renderer/stores/workspace'
 import { Sidebar } from '@/renderer/components/Sidebar'
@@ -12,6 +13,7 @@ import { DocumentPage } from '@/renderer/pages/DocumentPage'
 import { ReviewPage } from '@/renderer/pages/ReviewPage'
 import { AISettingsPage, DifySettingsPage } from '@/renderer/pages/SettingsPages'
 import { CompatibilityPage } from '@/renderer/pages/CompatibilityPage'
+import type { StudioProject } from '@/shared/types/desktop'
 
 const EditorPane = lazy(async () => {
   const module = await import('@/renderer/components/EditorPane')
@@ -27,13 +29,14 @@ export default function App() {
   const { activeTab, content, project, notice, set } = state
 
   const refresh = async () => {
-    const [projects, aiProfiles, difyProfiles, approvals] = await Promise.all([
+    const [projects, aiProfiles, difyProfiles, approvals, apiRuntime] = await Promise.all([
       desktop.projects.list(),
       desktop.settings.listAI(),
       desktop.settings.listDify(),
       desktop.approvals.list(),
+      desktop.runtime.apiStatus(),
     ])
-    set({ projects, aiProfiles, difyProfiles, approvals })
+    set({ projects, aiProfiles, difyProfiles, approvals, apiRuntime })
   }
 
   useEffect(() => {
@@ -74,6 +77,7 @@ export default function App() {
       generatedTests: '',
       proposedDsl: undefined,
       fixApprovalId: undefined,
+      debuggerLaunch: undefined,
       activeTab: 'requirement',
       selectedNodeId: undefined,
       notice: 'New local workspace ready.',
@@ -90,9 +94,128 @@ export default function App() {
       requirement: loaded.requirement,
       documentation: loaded.documentation,
       generatedTests: loaded.generatedTests,
+      debuggerLaunch: undefined,
       activeTab: 'editor',
       notice: `Opened ${loaded.name}.`,
     })
+  }
+
+  const startApiRuntime = async (
+    target: Pick<StudioProject, 'id' | 'name' | 'dsl'>,
+    loaded?: StudioProject,
+  ): Promise<boolean> => {
+    const current = useWorkspace.getState()
+    const parsed = parseDsl(target.dsl).document
+    const requiresModel = parsed?.workflow?.graph.nodes.some(node =>
+      ['llm', 'question-classifier', 'parameter-extractor'].includes(node.data.type),
+    )
+    const profile = requiresModel ? current.aiProfiles[0] : undefined
+    if (requiresModel && !profile) {
+      set({ activeTab: 'ai-settings', notice: 'Configure an AI profile before starting this API runtime.' })
+      return false
+    }
+    const title = `Start local API runtime: ${target.name} (${profile?.name ?? 'deterministic'})`
+    if (profile && !isLoopbackAIProfile(profile)) {
+      const approved = current.approvals.find(item =>
+        item.action === 'external-ai' && item.title === title && item.status === 'approved',
+      )
+      if (!approved) {
+        const pending = current.approvals.find(item =>
+          item.action === 'external-ai' && item.title === title && item.status === 'pending',
+        )
+        const request = pending ?? await desktop.approvals.create({
+          projectId: target.id,
+          action: 'external-ai',
+          title,
+          summary: `Expose ${target.name} on 127.0.0.1. API callers may send model prompts through ${profile.name}.`,
+          risk: 'high',
+        })
+        set({
+          approvals: pending ? current.approvals : [request, ...current.approvals],
+          activeTab: 'review',
+          notice: 'Approve the local API runtime, then start the API tester again.',
+        })
+        return false
+      }
+    }
+    try {
+      set({ busy: true })
+      const status = await desktop.runtime.startApi(target.dsl, target.id, target.name, profile?.id)
+      set({
+        ...(loaded
+          ? {
+              project: loaded,
+              content: loaded.dsl,
+              requirement: loaded.requirement,
+              documentation: loaded.documentation,
+              generatedTests: loaded.generatedTests,
+            }
+          : {}),
+        activeTab: 'debugger',
+        apiRuntime: status,
+        busy: false,
+        notice: `Local API runtime started at ${status.baseUrl}.`,
+      })
+      return true
+    }
+    catch (error) {
+      set({
+        busy: false,
+        notice: error instanceof Error ? error.message : String(error),
+      })
+      return false
+    }
+  }
+
+  const startCurrentApiRuntime = async (): Promise<boolean> => {
+    const current = useWorkspace.getState()
+    if (!current.content.trim()) {
+      set({ notice: 'Add or open a DSL before starting the local API runtime.' })
+      return false
+    }
+    return startApiRuntime({
+      id: current.project?.id ?? 'unsaved-workspace',
+      name: current.project?.name ?? current.parsed?.app.name ?? 'Unsaved workflow',
+      dsl: current.content,
+    })
+  }
+
+  const runProject = async (id: string, mode: 'standalone' | 'api') => {
+    const loaded = await desktop.projects.get(id)
+    if (!loaded)
+      return set({ notice: 'Project not found.' })
+    if (mode === 'api') {
+      await startApiRuntime(loaded, loaded)
+      return
+    }
+    set({
+      project: loaded,
+      content: loaded.dsl,
+      requirement: loaded.requirement,
+      documentation: loaded.documentation,
+      generatedTests: loaded.generatedTests,
+      simulation: undefined,
+      activeTab: 'debugger',
+      debuggerLaunch: { id: Date.now(), mode: 'standalone' },
+      notice: `Preparing ${loaded.name} for Graphon execution.`,
+    })
+  }
+
+  const stopRuntime = async () => {
+    try {
+      const result = await desktop.runtime.stop()
+      const apiStatus = await desktop.runtime.stopApi()
+      set({
+        busy: false,
+        apiRuntime: apiStatus,
+        notice: result.stopped
+          ? `Stopped ${result.standaloneRuns} Graphon run(s), ${result.difyRequests} Dify request(s), and ${result.remoteDifyTasks} remote Dify task(s).`
+          : 'There is no active runtime to stop.',
+      })
+    }
+    catch (error) {
+      set({ busy: false, notice: error instanceof Error ? error.message : String(error) })
+    }
   }
 
   const applyImported = (content: string, name: string) => {
@@ -104,6 +227,7 @@ export default function App() {
       requirement: '',
       documentation: '',
       generatedTests: '',
+      debuggerLaunch: undefined,
       activeTab: 'editor',
       notice: `Imported ${name}.`,
     })
@@ -193,7 +317,7 @@ export default function App() {
       case 'requirement': return <RequirementPage />
       case 'editor': return <EditorPane />
       case 'visual': return <WorkflowGraph />
-      case 'debugger': return <DebuggerPage />
+      case 'debugger': return <DebuggerPage onStartApi={startCurrentApiRuntime} />
       case 'validation': return <ValidationPage />
       case 'documentation': return <DocumentPage kind="documentation" />
       case 'tests': return <DocumentPage kind="tests" />
@@ -209,7 +333,14 @@ export default function App() {
 
   return (
     <div className="app-shell">
-      <Sidebar onNew={newProject} onUpload={upload} onOpen={openProject} onRename={renameProject} />
+      <Sidebar
+        onNew={newProject}
+        onUpload={upload}
+        onOpen={openProject}
+        onRename={renameProject}
+        onRun={runProject}
+        onStop={stopRuntime}
+      />
       <main className="main-shell">
         {!settingsOnly && <WorkspaceHeader onSave={saveProject} onExport={exportDsl} />}
         <div className={showInspector ? 'workspace-body with-inspector' : 'workspace-body'}>

@@ -8,9 +8,11 @@ import {
   ReactFlow,
   type NodeProps,
   type NodeTypes,
+  useNodesState,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { useMemo, type CSSProperties } from 'react'
+import { useEffect, useMemo, type CSSProperties } from 'react'
+import { updateNodeInDsl } from '@/core/dsl/node-editor'
 import { toFlowGraph } from '@/core/graph/converter'
 import { useWorkspace } from '@/renderer/stores/workspace'
 
@@ -21,14 +23,14 @@ interface WorkflowNodeData {
   accent?: string
 }
 
-function WorkflowNode({ data, selected }: NodeProps) {
+function WorkflowNode({ id, data, selected }: NodeProps) {
   const node = data as WorkflowNodeData
   const nodeStyle = {
     '--workflow-node-accent': node.accent ?? '#6f8099',
   } as CSSProperties
 
   return (
-    <div className={`workflow-node${selected ? ' selected' : ''}`} style={nodeStyle}>
+    <div data-testid={`workflow-node-${id}`} className={`workflow-node${selected ? ' selected' : ''}`} style={nodeStyle}>
       <Handle type="target" position={Position.Left} />
       <div className="workflow-node-kind">{node.nodeType ?? 'node'}</div>
       <div className="workflow-node-title">{node.label ?? node.nodeType ?? 'Untitled node'}</div>
@@ -39,9 +41,16 @@ function WorkflowNode({ data, selected }: NodeProps) {
 }
 
 export function WorkflowGraph() {
-  const { parsed, set } = useWorkspace()
+  const { content, parsed, selectedNodeId, set } = useWorkspace()
   const nodeTypes = useMemo<NodeTypes>(() => ({ workflow: WorkflowNode }), [])
   const graph = useMemo(() => toFlowGraph(parsed), [parsed])
+  const graphNodes = useMemo(
+    () => graph.nodes.map(node => ({ ...node, selected: node.id === selectedNodeId })),
+    [graph.nodes, selectedNodeId],
+  )
+  const [nodes, setNodes, onNodesChange] = useNodesState(graphNodes)
+
+  useEffect(() => setNodes(graphNodes), [graphNodes, setNodes])
 
   if (!graph.nodes.length) {
     return (
@@ -56,7 +65,7 @@ export function WorkflowGraph() {
   return (
     <div className="flow-shell">
       <ReactFlow
-        nodes={graph.nodes}
+        nodes={nodes}
         edges={graph.edges}
         nodeTypes={nodeTypes}
         colorMode="dark"
@@ -64,15 +73,35 @@ export function WorkflowGraph() {
         fitViewOptions={{ padding: 0.25 }}
         nodesDraggable
         nodesConnectable={false}
+        onNodesChange={onNodesChange}
         onNodeClick={(_event, node) => set({ selectedNodeId: node.id })}
+        onNodeDragStop={(_event, node) => {
+          try {
+            set({
+              content: updateNodeInDsl(content, node.id, { position: node.position }),
+              notice: `Updated the position of ${String(node.data.label ?? node.id)} in the DSL.`,
+            })
+          }
+          catch (error) {
+            set({ notice: error instanceof Error ? error.message : String(error) })
+          }
+        }}
         proOptions={{ hideAttribution: true }}
       >
         <Controls />
         <MiniMap
           nodeColor={node => String(node.data?.accent ?? '#728399')}
-          nodeStrokeColor="#0d151f"
-          nodeStrokeWidth={3}
-          maskColor="rgba(7, 12, 18, .72)"
+          nodeStrokeColor="#d5e2ef"
+          nodeStrokeWidth={2}
+          nodeBorderRadius={4}
+          bgColor="#0a1119"
+          maskColor="rgba(6, 12, 19, .34)"
+          maskStrokeColor="#73d5ac"
+          maskStrokeWidth={3}
+          pannable
+          zoomable
+          ariaLabel="Workflow overview and current viewport"
+          className="workflow-minimap"
         />
         <Background variant={BackgroundVariant.Dots} gap={18} size={1} color="#26364a" />
       </ReactFlow>

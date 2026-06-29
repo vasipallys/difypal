@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process'
+import { randomUUID } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import type { RuntimeEngineResult, RuntimeEngineStatus } from '@/shared/types/desktop'
@@ -25,6 +26,9 @@ interface RunRequest {
 const MAX_OUTPUT_BYTES = 16 * 1024 * 1024
 
 export class RuntimeEngineBridge {
+  private readonly activeRuns = new Map<string, ReturnType<typeof spawn>>()
+  private readonly stoppedRuns = new Set<ReturnType<typeof spawn>>()
+
   constructor(private readonly root: string) {}
 
   status(): Promise<RuntimeEngineStatus> {
@@ -32,7 +36,23 @@ export class RuntimeEngineBridge {
   }
 
   run(request: Omit<RunRequest, 'action'>): Promise<RuntimeEngineResult> {
-    return this.invoke<RuntimeEngineResult>({ action: 'run', ...request })
+    const workflowId = request.workflowId || randomUUID()
+    return this.invoke<RuntimeEngineResult>(
+      { action: 'run', ...request, workflowId },
+      workflowId,
+    )
+  }
+
+  stop(workflowId?: string): number {
+    const runs = workflowId
+      ? [...this.activeRuns].filter(([id]) => id === workflowId)
+      : [...this.activeRuns]
+    for (const [id, child] of runs) {
+      this.activeRuns.delete(id)
+      this.stoppedRuns.add(child)
+      child.kill()
+    }
+    return runs.length
   }
 
   private pythonPath(): string {
@@ -47,7 +67,7 @@ export class RuntimeEngineBridge {
     return executable
   }
 
-  private invoke<T>(request: Record<string, unknown>): Promise<T> {
+  private invoke<T>(request: Record<string, unknown>, runId?: string): Promise<T> {
     return new Promise((resolve, reject) => {
       let stdout = ''
       let stderr = ''
@@ -62,6 +82,8 @@ export class RuntimeEngineBridge {
           PYTHONUNBUFFERED: '1',
         },
       })
+      if (runId)
+        this.activeRuns.set(runId, child)
       const timer = setTimeout(() => {
         child.kill()
         reject(new Error('Standalone runtime exceeded the 15 minute execution limit.'))
@@ -86,9 +108,15 @@ export class RuntimeEngineBridge {
       })
       child.on('close', () => {
         clearTimeout(timer)
+        if (runId)
+          this.activeRuns.delete(runId)
         if (settled)
           return
         settled = true
+        if (this.stoppedRuns.delete(child)) {
+          reject(new Error('Standalone Graphon run stopped by user.'))
+          return
+        }
         try {
           const response = JSON.parse(stdout) as BridgeResponse<T>
           if (!response.ok || response.result === undefined) {

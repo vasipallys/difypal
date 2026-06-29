@@ -5,6 +5,7 @@ import type {
   DifyProfile,
   ProjectSummary,
   StudioProject,
+  ApiRuntimeStatus,
 } from '@/shared/types/desktop'
 import type { DifyDsl, SimulationResult, ValidationResult } from '@/shared/types/dsl'
 
@@ -21,6 +22,11 @@ export type WorkspaceTab =
   | 'dify-settings'
   | 'compatibility'
 
+export interface DebuggerLaunchRequest {
+  id: number
+  mode: 'standalone' | 'dify'
+}
+
 interface WorkspaceStore {
   activeTab: WorkspaceTab
   project?: StudioProject
@@ -34,6 +40,8 @@ interface WorkspaceStore {
   generatedTests: string
   proposedDsl?: string
   fixApprovalId?: string
+  debuggerLaunch?: DebuggerLaunchRequest
+  apiRuntime?: ApiRuntimeStatus
   selectedNodeId?: string
   approvals: ApprovalRequest[]
   aiProfiles: AIProfile[]

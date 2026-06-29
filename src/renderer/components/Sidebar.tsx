@@ -8,10 +8,12 @@ import {
   MoreHorizontal,
   Network,
   Pencil,
+  Play,
   Plus,
   Save,
   Settings2,
   ShieldCheck,
+  Square,
   TestTube2,
   Upload,
   X,
@@ -25,10 +27,12 @@ interface Props {
   onUpload: () => void
   onOpen: (id: string) => void
   onRename: (id: string, name: string) => Promise<void>
+  onRun: (id: string, mode: 'standalone' | 'api') => Promise<void>
+  onStop: () => Promise<void>
 }
 
-export function Sidebar({ onNew, onUpload, onOpen, onRename }: Props) {
-  const { projects, project, activeTab, set } = useWorkspace()
+export function Sidebar({ onNew, onUpload, onOpen, onRename, onRun, onStop }: Props) {
+  const { projects, project, activeTab, busy, apiRuntime, set } = useWorkspace()
   const [menuProjectId, setMenuProjectId] = useState<string>()
   const [editingProjectId, setEditingProjectId] = useState<string>()
   const [draftName, setDraftName] = useState('')
@@ -131,6 +135,26 @@ export function Sidebar({ onNew, onUpload, onOpen, onRename }: Props) {
                     </button>
                     {menuProjectId === item.id && (
                       <div className="project-menu" role="menu">
+                        <button
+                          role="menuitem"
+                          onClick={() => { setMenuProjectId(undefined); void onRun(item.id, 'standalone') }}
+                        >
+                          <Play size={13} /> Run with Graphon
+                        </button>
+                        <button
+                          role="menuitem"
+                          onClick={() => { setMenuProjectId(undefined); void onRun(item.id, 'api') }}
+                        >
+                          <Network size={13} /> Start local API runtime
+                        </button>
+                        <button
+                          role="menuitem"
+                          disabled={!busy && !apiRuntime?.running}
+                          onClick={() => { setMenuProjectId(undefined); void onStop() }}
+                        >
+                          <Square size={12} /> Stop active run
+                        </button>
+                        <span className="project-menu-separator" />
                         <button role="menuitem" onClick={() => beginRename(item.id, item.name)}><Pencil size={13} /> Rename</button>
                       </div>
                     )}

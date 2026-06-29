@@ -2,7 +2,7 @@ import type { AppMode, DifyDsl } from '@/shared/types/dsl'
 import { serializeDsl } from './parser'
 
 function id(prefix: string): string {
-  return `${prefix}-${crypto.randomUUID().slice(0, 8)}`
+  return `${prefix}_${crypto.randomUUID().replaceAll('-', '').slice(0, 12)}`
 }
 
 export function generateDraftFromRequirement(
@@ -84,7 +84,7 @@ export function generateDraftFromRequirement(
               },
               prompt_template: [{
                 role: 'system',
-                text: `You are a reliable workflow assistant.\n\nTask:\n${requirement.trim()}\n\nUse the supplied input. Do not invent missing facts. State uncertainty clearly. Return a concise, useful answer.`,
+                text: `You are the execution model inside an already-running Dify workflow. Apply the workflow behavior directly to the supplied user input.\n\nWorkflow behavior:\n${requirement.trim()}\n\nThe workflow has already been built. If the behavior is phrased as "create a workflow" or "build a workflow", interpret it as the processing that this running workflow must perform. Return only the requested result for the user input. Do not describe workflow design, implementation steps, nodes, or preprocessing. Do not invent missing facts, and state uncertainty clearly.`,
               }, {
                 role: 'user',
                 text: `{{#${startId}.input#}}`,

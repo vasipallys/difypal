@@ -12,7 +12,13 @@ import { useEffect, useRef, useState } from 'react'
 import { isLoopbackAIProfile } from '@/core/ai/presets'
 import { desktop } from '@/renderer/lib/desktop-api'
 import { useWorkspace } from '@/renderer/stores/workspace'
+import { ApiTesterModal } from '@/renderer/components/ApiTesterModal'
 import type { RuntimeEngineStatus } from '@/shared/types/desktop'
+import type { DifyDsl } from '@/shared/types/dsl'
+
+interface Props {
+  onStartApi: () => Promise<boolean>
+}
 
 function fingerprint(value: string): string {
   let hash = 2166136261
@@ -23,13 +29,34 @@ function fingerprint(value: string): string {
   return (hash >>> 0).toString(16).padStart(8, '0')
 }
 
-export function DebuggerPage() {
+function defaultInputsFor(dsl?: DifyDsl): Record<string, unknown> {
+  const start = dsl?.workflow?.graph.nodes.find(node => node.data.type === 'start')
+  const variables = Array.isArray(start?.data.variables)
+    ? start.data.variables as Array<Record<string, unknown>>
+    : []
+  return Object.fromEntries(variables.flatMap((variable) => {
+    const name = String(variable.variable ?? '')
+    if (!name)
+      return []
+    const type = String(variable.type ?? '')
+    const options = Array.isArray(variable.options) ? variable.options : []
+    const value = variable.default
+      ?? (type === 'number' ? 0
+        : type === 'checkbox' || type === 'boolean' ? false
+          : options[0] ?? `Hello from ${name}`)
+    return [[name, value]]
+  }))
+}
+
+export function DebuggerPage({ onStartApi }: Props) {
   const {
     content,
     parsed,
     simulation,
     aiProfiles,
     difyProfiles,
+    debuggerLaunch,
+    apiRuntime,
     busy,
     set,
   } = useWorkspace()
@@ -40,13 +67,14 @@ export function DebuggerPage() {
   const [runError, setRunError] = useState('')
   const [engineStatus, setEngineStatus] = useState<RuntimeEngineStatus>()
   const [engineStatusError, setEngineStatusError] = useState('')
+  const [showApiTester, setShowApiTester] = useState(false)
+  const [startingApi, setStartingApi] = useState(false)
   const startVariableSignature = useRef('')
+  const handledLaunchId = useRef<number | undefined>(undefined)
 
   useEffect(() => {
     const start = parsed?.workflow?.graph.nodes.find(node => node.data.type === 'start')
-    const variables = Array.isArray(start?.data.variables)
-      ? start.data.variables as Array<Record<string, unknown>>
-      : []
+    const variables = Array.isArray(start?.data.variables) ? start.data.variables as Array<Record<string, unknown>> : []
     const names = variables
       .map(variable => String(variable.variable ?? ''))
       .filter(Boolean)
@@ -54,19 +82,7 @@ export function DebuggerPage() {
     if (!names.length || signature === startVariableSignature.current)
       return
     startVariableSignature.current = signature
-    const template = Object.fromEntries(variables.flatMap((variable) => {
-      const name = String(variable.variable ?? '')
-      if (!name)
-        return []
-      const type = String(variable.type ?? '')
-      const options = Array.isArray(variable.options) ? variable.options : []
-      const value = variable.default
-        ?? (type === 'number' ? 0
-          : type === 'checkbox' || type === 'boolean' ? false
-            : options[0] ?? `Hello from ${name}`)
-      return [[name, value]]
-    }))
-    setInputs(JSON.stringify(template, null, 2))
+    setInputs(JSON.stringify(defaultInputsFor(parsed), null, 2))
   }, [parsed])
 
   useEffect(() => {
@@ -175,26 +191,32 @@ export function DebuggerPage() {
     })
   }
 
-  const run = async () => {
+  const run = async (request?: {
+    mode?: 'simulate' | 'standalone' | 'dify'
+    profileId?: string
+    parsedInputs?: Record<string, unknown>
+  }) => {
     setRunError('')
     try {
-      const parsedInputs = JSON.parse(inputs) as Record<string, unknown>
-      if (mode === 'simulate') {
+      const runMode = request?.mode ?? mode
+      const selectedProfileId = request?.profileId ?? profileId
+      const parsedInputs = request?.parsedInputs ?? JSON.parse(inputs) as Record<string, unknown>
+      if (runMode === 'simulate') {
         const parsedMocks = JSON.parse(mocks) as Record<string, unknown>
         set({ busy: true })
         const result = await desktop.runtime.simulate(content, parsedInputs, parsedMocks)
         set({ simulation: result, busy: false, notice: `Simulation ${result.status}.` })
         return
       }
-      if (mode === 'standalone') {
+      if (runMode === 'standalone') {
         if (engineStatusError)
           throw new Error(engineStatusError)
-        await runStandalone(parsedInputs, profileId || undefined)
+        await runStandalone(parsedInputs, selectedProfileId || undefined)
         return
       }
-      if (!profileId)
+      if (!selectedProfileId)
         throw new Error('Choose a Dify profile first.')
-      const profileName = difyProfiles.find(item => item.id === profileId)?.name ?? profileId
+      const profileName = difyProfiles.find(item => item.id === selectedProfileId)?.name ?? selectedProfileId
       const approved = useWorkspace.getState().approvals.find(item =>
         item.action === 'dify-run'
         && item.title.includes(profileName)
@@ -202,7 +224,7 @@ export function DebuggerPage() {
       )
       if (approved) {
         set({ busy: true })
-        const result = await desktop.runtime.runDify(profileId, parsedInputs, 'dify-dsl-studio')
+        const result = await desktop.runtime.runDify(selectedProfileId, parsedInputs, 'dify-dsl-studio')
         const applied = await desktop.approvals.decide(approved.id, 'applied')
         set({
           approvals: useWorkspace.getState().approvals.map(item => item.id === approved.id ? applied : item),
@@ -231,6 +253,27 @@ export function DebuggerPage() {
     }
   }
 
+  useEffect(() => {
+    if (!debuggerLaunch || handledLaunchId.current === debuggerLaunch.id || !parsed)
+      return
+    if (debuggerLaunch.mode === 'standalone' && !engineStatus && !engineStatusError)
+      return
+    handledLaunchId.current = debuggerLaunch.id
+    const selectedProfileId = debuggerLaunch.mode === 'standalone'
+      ? aiProfiles[0]?.id ?? ''
+      : difyProfiles[0]?.id ?? ''
+    const preparedInputs = defaultInputsFor(parsed)
+    setMode(debuggerLaunch.mode)
+    setProfileId(selectedProfileId)
+    setInputs(JSON.stringify(preparedInputs, null, 2))
+    set({ debuggerLaunch: undefined })
+    void run({
+      mode: debuggerLaunch.mode,
+      profileId: selectedProfileId,
+      parsedInputs: preparedInputs,
+    })
+  }, [debuggerLaunch, parsed, engineStatus, engineStatusError, aiProfiles, difyProfiles])
+
   const runLabel = busy
     ? 'Running…'
     : mode === 'simulate'
@@ -238,6 +281,21 @@ export function DebuggerPage() {
       : mode === 'standalone'
         ? 'Run with Graphon'
         : 'Request real run'
+
+  const openApiTester = async () => {
+    if (apiRuntime?.running) {
+      setShowApiTester(true)
+      return
+    }
+    setStartingApi(true)
+    try {
+      if (await onStartApi())
+        setShowApiTester(true)
+    }
+    finally {
+      setStartingApi(false)
+    }
+  }
 
   return (
     <div className="debug-layout">
@@ -291,9 +349,31 @@ export function DebuggerPage() {
           <label>Mock node outputs<textarea value={mocks} onChange={event => setMocks(event.target.value)} rows={8} className="code-input" /></label>
         )}
         {runError && <p className="debug-input-error"><AlertTriangle size={14} /> {runError}</p>}
-        <button data-testid="run-debugger" className="button accent large" disabled={busy || !content.trim()} onClick={run}>
-          <CirclePlay size={16} /> {runLabel}
-        </button>
+        {apiRuntime?.running && (
+          <div className="api-runtime-card" data-testid="api-runtime-card">
+            <strong>Local Dify-compatible API</strong>
+            <label>Base URL<input readOnly value={apiRuntime.baseUrl ?? ''} /></label>
+            <label>Bearer API key<input readOnly value={apiRuntime.apiKey ?? ''} /></label>
+            <code>POST /workflows/run</code>
+            <code>GET /parameters · GET /info</code>
+            <code>GET /workflows/run/:id</code>
+            <code>POST /workflows/tasks/:task_id/stop</code>
+          </div>
+        )}
+        <div className="debug-run-actions">
+          <button data-testid="run-debugger" className="button accent large" disabled={busy || !content.trim()} onClick={() => void run()}>
+            <CirclePlay size={16} /> {runLabel}
+          </button>
+          <button
+            data-testid="open-api-tester"
+            className="button ghost large"
+            disabled={startingApi || busy || !content.trim()}
+            title={apiRuntime?.running ? 'Test the local runtime endpoints' : 'Start the local API runtime and open its tester'}
+            onClick={() => void openApiTester()}
+          >
+            <Server size={15} /> {startingApi ? 'Starting local APIs…' : 'Test local APIs'}
+          </button>
+        </div>
       </section>
       <section className="trace-panel">
         <div className="panel-toolbar">
@@ -338,6 +418,9 @@ export function DebuggerPage() {
           {!simulation && <div className="empty-state"><FlaskConical /><h2>Ready to run</h2><p>Choose a runtime, provide inputs, then run.</p></div>}
         </div>
       </section>
+      {showApiTester && apiRuntime?.running && (
+        <ApiTesterModal runtime={apiRuntime} dsl={parsed} onClose={() => setShowApiTester(false)} />
+      )}
     </div>
   )
 }

@@ -83,6 +83,22 @@ export interface RuntimeEngineResult extends SimulationResult {
   engine: RuntimeEngineStatus
 }
 
+export interface RuntimeStopResult {
+  stopped: boolean
+  standaloneRuns: number
+  difyRequests: number
+  remoteDifyTasks: number
+}
+
+export interface ApiRuntimeStatus {
+  running: boolean
+  baseUrl?: string
+  apiKey?: string
+  projectId?: string
+  projectName?: string
+  activeRuns: number
+}
+
 export interface DesktopApi {
   projects: {
     list(): Promise<ProjectSummary[]>
@@ -111,6 +127,10 @@ export interface DesktopApi {
     simulate(content: string, inputs: Record<string, unknown>, mocks: Record<string, unknown>): Promise<SimulationResult>
     standaloneStatus(): Promise<RuntimeEngineStatus>
     runStandalone(content: string, inputs: Record<string, unknown>, profileId?: string): Promise<RuntimeEngineResult>
+    stop(): Promise<RuntimeStopResult>
+    startApi(content: string, projectId: string, projectName: string, profileId?: string): Promise<ApiRuntimeStatus>
+    stopApi(): Promise<ApiRuntimeStatus>
+    apiStatus(): Promise<ApiRuntimeStatus>
     generateAI(profileId: string, prompt: string): Promise<{ text: string; model: string }>
     runDify(profileId: string, inputs: Record<string, unknown>, user: string): Promise<Record<string, unknown>>
     testDify(profileId: string): Promise<{ ok: boolean; message: string }>

@@ -55,6 +55,9 @@ test('creates, validates, visualizes, and approval-gates a workflow', async () =
       await window.getByRole('button', { name: 'Save', exact: true }).click()
       await expect(window.getByText('Project saved locally.')).toBeVisible()
       await window.getByRole('button', { name: /Project actions for/ }).click()
+      await expect(window.getByRole('menuitem', { name: 'Run with Graphon' })).toBeVisible()
+      await expect(window.getByRole('menuitem', { name: 'Start local API runtime' })).toBeVisible()
+      await expect(window.getByRole('menuitem', { name: 'Stop active run' })).toBeDisabled()
       await window.getByRole('menuitem', { name: 'Rename' }).click()
       await window.getByTestId('rename-project-input').fill('Renamed support workflow')
       await window.getByRole('button', { name: 'Save project name' }).click()
@@ -66,11 +69,27 @@ test('creates, validates, visualizes, and approval-gates a workflow', async () =
       await expect(window.locator('.react-flow__node')).toHaveCount(3)
       await expect(window.locator('.workflow-node-title')).toHaveText(['User Input', 'Generate response', 'Output'])
       await expect(window.locator('.react-flow__edge')).toHaveCount(2)
+      await expect(window.locator('.react-flow__minimap-node')).toHaveCount(3)
+      await expect(window.locator('.react-flow__minimap-mask')).toBeVisible()
+
+      const startNode = window.locator('.workflow-node').filter({ hasText: 'User Input' })
+      await expect(startNode).toHaveCount(1)
+      await startNode.click()
+      await window.getByTestId('node-title-input').fill('Editable user input')
+      await window.getByTestId('node-description-input').fill('Updated from the visual inspector')
+      await window.getByTestId('node-position-x').fill('160')
+      await window.getByTestId('node-position-y').fill('280')
+      await window.getByTestId('apply-node-changes').click()
+      await expect(window.getByText('Updated Editable user input in the DSL.')).toBeVisible()
+      await expect(window.locator('.workflow-node-title')).toHaveText(['Editable user input', 'Generate response', 'Output'])
+
       await window.getByRole('button', { name: 'Validation' }).click()
       await expect(window.getByText('All blocking checks pass')).toBeVisible()
     })
     await test.step('simulate with a visible trace', async () => {
       await window.locator('.tabs').getByRole('button', { name: 'Debugger' }).click()
+      await expect(window.getByTestId('open-api-tester')).toBeEnabled()
+      await expect(window.getByTestId('open-api-tester')).toHaveAttribute('title', 'Start the local API runtime and open its tester')
       await window.getByTestId('debug-inputs').fill(JSON.stringify({
         input: 'x'.repeat(4_000),
         rows: Array.from({ length: 120 }, (_, index) => ({ index, value: `row-${index}` })),

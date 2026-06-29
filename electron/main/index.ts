@@ -6,8 +6,10 @@ import { validateDsl } from '@/core/validation/validator'
 import { simulateDsl } from '@/core/runner/simulator'
 import { redactSecrets, redactText } from '@/core/security/redaction'
 import { createProvider } from '@/core/ai/providers'
+import { parseDifySseBlock } from '@/core/dify/sse'
 import { buildContentSecurityPolicy } from '@/core/security/csp'
 import { RuntimeEngineBridge } from './runtime-engine'
+import { DslApiRuntimeServer } from './api-runtime'
 import type { AIProfile, ApprovalRequest, DifyProfile, StudioProject } from '@/shared/types/desktop'
 
 if (process.env.DIFY_STUDIO_USER_DATA_DIR)
@@ -16,6 +18,18 @@ if (process.env.DIFY_STUDIO_USER_DATA_DIR)
 let mainWindow: BrowserWindow | null = null
 let storage: StorageService
 let standaloneRuntime: RuntimeEngineBridge
+let apiRuntime: DslApiRuntimeServer
+
+interface ActiveDifyRequest {
+  controller: AbortController
+  baseUrl: string
+  apiKey: string
+  user: string
+  taskId?: string
+  stopped?: boolean
+}
+
+const activeDifyRequests = new Set<ActiveDifyRequest>()
 
 function endpoint(baseUrl: string, path: string): string {
   const base = baseUrl.replace(/\/+$/, '')
@@ -23,6 +37,55 @@ function endpoint(baseUrl: string, path: string): string {
   if (base.endsWith('/v1'))
     return `${base}/${normalizedPath.replace(/^v1\//, '')}`
   return `${base}/${normalizedPath}`
+}
+
+async function readDifyWorkflowStream(
+  response: Response,
+  active: ActiveDifyRequest,
+): Promise<Record<string, unknown>> {
+  if (!response.body)
+    throw new Error('Dify returned an empty streaming response.')
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  const events: Array<Record<string, unknown>> = []
+  let taskId = ''
+  let workflowRunId = ''
+  let finalData: Record<string, unknown> = {}
+
+  const consume = (block: string) => {
+    const event = parseDifySseBlock(block)
+    if (!event)
+      return
+    taskId = String(event.task_id ?? taskId)
+    workflowRunId = String(event.workflow_run_id ?? workflowRunId)
+    if (taskId)
+      active.taskId = taskId
+    if (event.event === 'workflow_finished' && event.data && typeof event.data === 'object')
+      finalData = event.data as Record<string, unknown>
+    if (events.length < 500)
+      events.push(redactSecrets(event))
+  }
+
+  while (true) {
+    const { done, value } = await reader.read()
+    buffer += decoder.decode(value, { stream: !done })
+    const blocks = buffer.split(/\r?\n\r?\n/)
+    buffer = blocks.pop() ?? ''
+    for (const block of blocks)
+      consume(block)
+    if (done)
+      break
+  }
+  if (buffer.trim())
+    consume(buffer)
+
+  return redactSecrets({
+    task_id: taskId,
+    workflow_run_id: workflowRunId,
+    data: finalData,
+    events,
+  })
 }
 
 async function createWindow(): Promise<void> {
@@ -135,6 +198,74 @@ function registerIpc(): void {
     catch (error) {
       throw new Error(redactText(error instanceof Error ? error.message : String(error)))
     }
+  })
+  ipcMain.handle('runtime:stop', async () => {
+    const standaloneRuns = standaloneRuntime.stop()
+    const difyRequests = activeDifyRequests.size
+    let remoteDifyTasks = 0
+    await Promise.all([...activeDifyRequests].map(async (request) => {
+      try {
+        if (request.taskId) {
+          const stopController = new AbortController()
+          const stopTimer = setTimeout(() => stopController.abort(), 10_000)
+          try {
+            const response = await fetch(endpoint(
+              request.baseUrl,
+              `v1/workflows/tasks/${encodeURIComponent(request.taskId)}/stop`,
+            ), {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${request.apiKey}`,
+              },
+              body: JSON.stringify({ user: request.user }),
+              signal: stopController.signal,
+            })
+            if (response.ok)
+              remoteDifyTasks += 1
+          }
+          finally {
+            clearTimeout(stopTimer)
+          }
+        }
+      }
+      catch {
+        // The local request is still aborted if the remote stop endpoint fails.
+      }
+      finally {
+        request.stopped = true
+        request.controller.abort()
+      }
+    }))
+    return {
+      stopped: standaloneRuns + difyRequests > 0,
+      standaloneRuns,
+      difyRequests,
+      remoteDifyTasks,
+    }
+  })
+  ipcMain.handle('runtime:api-status', () => apiRuntime.status())
+  ipcMain.handle('runtime:stop-api', () => apiRuntime.stop())
+  ipcMain.handle('runtime:start-api', async (
+    _event,
+    content: string,
+    projectId: string,
+    projectName: string,
+    profileId?: string,
+  ) => {
+    if (Buffer.byteLength(content, 'utf8') > 10 * 1024 * 1024)
+      throw new Error('DSL exceeds the 10 MB runtime limit.')
+    const profile = profileId ? storage.getProfile<AIProfile>(profileId, 'ai') : undefined
+    if (profileId && !profile)
+      throw new Error('AI profile not found.')
+    return apiRuntime.start({
+      dsl: content,
+      projectId,
+      projectName,
+      profile: profile
+        ? { ...profile, apiKey: storage.getProfileSecret(profile.id, 'ai') ?? undefined }
+        : undefined,
+    })
   })
   ipcMain.handle('runtime:run-standalone', async (
     _event,
@@ -258,6 +389,14 @@ function registerIpc(): void {
     if (!apiKey)
       throw new Error('Dify API key is not configured.')
     const controller = new AbortController()
+    const normalizedUser = user || 'dify-dsl-studio'
+    const activeRequest: ActiveDifyRequest = {
+      controller,
+      baseUrl: profile.baseUrl,
+      apiKey,
+      user: normalizedUser,
+    }
+    activeDifyRequests.add(activeRequest)
     const timer = setTimeout(() => controller.abort(), profile.timeout)
     try {
       const response = await fetch(endpoint(profile.baseUrl, 'v1/workflows/run'), {
@@ -268,18 +407,25 @@ function registerIpc(): void {
         },
         body: JSON.stringify({
           inputs,
-          response_mode: 'blocking',
-          user: user || 'dify-dsl-studio',
+          response_mode: 'streaming',
+          user: normalizedUser,
         }),
         signal: controller.signal,
       })
-      const text = await response.text()
-      if (!response.ok)
+      if (!response.ok) {
+        const text = await response.text()
         throw new Error(redactText(`Dify returned ${response.status}: ${text.slice(0, 500)}`))
-      return redactSecrets(JSON.parse(text) as Record<string, unknown>)
+      }
+      return await readDifyWorkflowStream(response, activeRequest)
+    }
+    catch (error) {
+      if (activeRequest.stopped)
+        throw new Error('Dify API workflow stopped by user.')
+      throw error
     }
     finally {
       clearTimeout(timer)
+      activeDifyRequests.delete(activeRequest)
     }
   })
 }
@@ -301,6 +447,10 @@ app.whenReady().then(async () => {
       ? join(process.resourcesPath, 'runtime-engine')
       : join(app.getAppPath(), 'runtime-engine'),
   )
+  const rendererOrigin = process.env.VITE_DEV_SERVER_URL
+    ? new URL(process.env.VITE_DEV_SERVER_URL).origin
+    : 'null'
+  apiRuntime = new DslApiRuntimeServer(standaloneRuntime, rendererOrigin)
   registerIpc()
   await createWindow()
 })
