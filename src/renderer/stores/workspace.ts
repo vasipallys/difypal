@@ -44,6 +44,7 @@ interface WorkspaceStore {
   apiRuntime?: ApiRuntimeStatus
   selectedNodeId?: string
   approvals: ApprovalRequest[]
+  approvalPromptId?: string
   aiProfiles: AIProfile[]
   difyProfiles: DifyProfile[]
   busy: boolean

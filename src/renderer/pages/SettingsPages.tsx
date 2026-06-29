@@ -256,14 +256,19 @@ export function DifySettingsPage() {
     if (apiKey) {
       const approved = useWorkspace.getState().approvals.find(item => item.action === 'save-secret' && item.title.includes(profile.name) && item.status === 'approved')
       if (!approved) {
-        const request = await desktop.approvals.create({
+        const pending = useWorkspace.getState().approvals.find(item => item.action === 'save-secret' && item.title.includes(profile.name) && item.status === 'pending')
+        const request = pending ?? await desktop.approvals.create({
           projectId: useWorkspace.getState().project?.id,
           action: 'save-secret',
           title: `Save encrypted Dify credential for ${profile.name}`,
           summary: 'The application API key will be encrypted with the operating-system protection service.',
           risk: 'medium',
         })
-        set({ approvals: [request, ...useWorkspace.getState().approvals], notice: 'Approve the secret save in AI Review, then return and save again.' })
+        set({
+          approvals: pending ? useWorkspace.getState().approvals : [request, ...useWorkspace.getState().approvals],
+          approvalPromptId: request.id,
+          notice: 'Approve the secret save, then save again.',
+        })
         return
       }
     }

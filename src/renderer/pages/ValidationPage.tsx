@@ -36,7 +36,7 @@ export function ValidationPage() {
         approvals: [request, ...approvals],
         proposedDsl: proposal.content,
         fixApprovalId: request.id,
-        activeTab: 'review',
+        approvalPromptId: request.id,
         notice: 'Review and approve the proposed YAML patch.',
       })
     }

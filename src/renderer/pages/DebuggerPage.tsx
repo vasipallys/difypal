@@ -174,7 +174,7 @@ export function DebuggerPage({ onStartApi }: Props) {
       && item.status === 'pending',
     )
     if (pending) {
-      set({ activeTab: 'review', notice: 'Approve the pending standalone engine run.' })
+      set({ approvalPromptId: pending.id, notice: 'Approve the pending standalone engine run.' })
       return
     }
     const request = await desktop.approvals.create({
@@ -186,8 +186,8 @@ export function DebuggerPage({ onStartApi }: Props) {
     })
     set({
       approvals: [request, ...useWorkspace.getState().approvals],
-      activeTab: 'review',
-      notice: 'Approve the standalone Graphon model call, then return to Debugger and run again.',
+      approvalPromptId: request.id,
+      notice: 'Approve the standalone Graphon model call, then run again when ready.',
     })
   }
 
@@ -233,7 +233,12 @@ export function DebuggerPage({ onStartApi }: Props) {
         })
         return
       }
-      const approval = await desktop.approvals.create({
+      const pending = useWorkspace.getState().approvals.find(item =>
+        item.action === 'dify-run'
+        && item.title.includes(profileName)
+        && item.status === 'pending',
+      )
+      const approval = pending ?? await desktop.approvals.create({
         projectId: useWorkspace.getState().project?.id,
         action: 'dify-run',
         title: `Run against Dify: ${profileName}`,
@@ -241,9 +246,9 @@ export function DebuggerPage({ onStartApi }: Props) {
         risk: 'high',
       })
       set({
-        approvals: [approval, ...useWorkspace.getState().approvals],
-        activeTab: 'review',
-        notice: 'Approve the real Dify run in the review queue.',
+        approvals: pending ? useWorkspace.getState().approvals : [approval, ...useWorkspace.getState().approvals],
+        approvalPromptId: approval.id,
+        notice: 'Approve the real Dify run, then run again when ready.',
       })
     }
     catch (error) {

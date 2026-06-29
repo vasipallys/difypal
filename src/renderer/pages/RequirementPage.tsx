@@ -56,7 +56,12 @@ export function RequirementPage() {
       && item.status === 'approved',
     )
     if (!approved) {
-      const request = await desktop.approvals.create({
+      const pending = approvals.find(item =>
+        item.action === 'external-ai'
+        && item.title === approvalTitle
+        && item.status === 'pending',
+      )
+      const request = pending ?? await desktop.approvals.create({
         projectId: project?.id,
         action: 'external-ai',
         title: approvalTitle,
@@ -64,9 +69,9 @@ export function RequirementPage() {
         risk: 'medium',
       })
       set({
-        approvals: [request, ...approvals],
-        activeTab: 'review',
-        notice: 'Approve this model call, then return to Requirement and generate again.',
+        approvals: pending ? approvals : [request, ...approvals],
+        approvalPromptId: request.id,
+        notice: 'Approve this model call, then generate again when ready.',
       })
       return
     }

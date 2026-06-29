@@ -6,6 +6,7 @@ import { useWorkspace } from '@/renderer/stores/workspace'
 import { Sidebar } from '@/renderer/components/Sidebar'
 import { WorkspaceHeader } from '@/renderer/components/WorkspaceHeader'
 import { Inspector } from '@/renderer/components/Inspector'
+import { ApprovalPrompt } from '@/renderer/components/ApprovalPrompt'
 import { RequirementPage } from '@/renderer/pages/RequirementPage'
 import { ValidationPage } from '@/renderer/pages/ValidationPage'
 import { DebuggerPage } from '@/renderer/pages/DebuggerPage'
@@ -77,6 +78,7 @@ export default function App() {
       generatedTests: '',
       proposedDsl: undefined,
       fixApprovalId: undefined,
+      approvalPromptId: undefined,
       debuggerLaunch: undefined,
       activeTab: 'requirement',
       selectedNodeId: undefined,
@@ -132,7 +134,7 @@ export default function App() {
         })
         set({
           approvals: pending ? current.approvals : [request, ...current.approvals],
-          activeTab: 'review',
+          approvalPromptId: request.id,
           notice: 'Approve the local API runtime, then start the API tester again.',
         })
         return false
@@ -295,14 +297,23 @@ export default function App() {
       && item.status === 'approved',
     )
     if (!approved) {
-      const request = await desktop.approvals.create({
+      const pending = state.approvals.find(item =>
+        item.projectId === project?.id
+        && item.action === 'export-dsl'
+        && item.status === 'pending',
+      )
+      const request = pending ?? await desktop.approvals.create({
         projectId: project?.id,
         action: 'export-dsl',
         title: 'Export final Dify DSL',
         summary: `Export ${state.parsed?.app.name ?? 'the current workflow'} as a local YAML file after validation.`,
         risk: 'low',
       })
-      set({ approvals: [request, ...state.approvals], activeTab: 'review', notice: 'Approve the final export, then click Export DSL again.' })
+      set({
+        approvals: pending ? state.approvals : [request, ...state.approvals],
+        approvalPromptId: request.id,
+        notice: 'Approve the final export, then click Export DSL again.',
+      })
       return
     }
     const path = await desktop.files.exportDsl(content, `${state.parsed?.app.name ?? 'dify-workflow'}.yml`)
@@ -352,6 +363,7 @@ export default function App() {
           {showInspector && <Inspector />}
         </div>
       </main>
+      <ApprovalPrompt />
       {notice && <div className="toast" role="status">{notice}</div>}
     </div>
   )
