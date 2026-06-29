@@ -1,12 +1,16 @@
-import { lazy, Suspense, useEffect } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { parseDsl } from '@/core/dsl/parser'
 import { isLoopbackAIProfile } from '@/core/ai/presets'
+import { createStarterDsl, type StarterTemplateId } from '@/core/dsl/starter-templates'
+import { generateDocumentation } from '@/core/docs/generator'
+import { generateTestPlan } from '@/core/tests-generator/generator'
 import { desktop } from '@/renderer/lib/desktop-api'
 import { useWorkspace } from '@/renderer/stores/workspace'
 import { Sidebar } from '@/renderer/components/Sidebar'
 import { WorkspaceHeader } from '@/renderer/components/WorkspaceHeader'
 import { Inspector } from '@/renderer/components/Inspector'
 import { ApprovalPrompt } from '@/renderer/components/ApprovalPrompt'
+import { BlankDslModal } from '@/renderer/components/BlankDslModal'
 import { RequirementPage } from '@/renderer/pages/RequirementPage'
 import { ValidationPage } from '@/renderer/pages/ValidationPage'
 import { DebuggerPage } from '@/renderer/pages/DebuggerPage'
@@ -28,6 +32,7 @@ const WorkflowGraph = lazy(async () => {
 export default function App() {
   const state = useWorkspace()
   const { activeTab, content, project, notice, set } = state
+  const [showBlankDsl, setShowBlankDsl] = useState(false)
 
   const refresh = async () => {
     const [projects, aiProfiles, difyProfiles, approvals, apiRuntime] = await Promise.all([
@@ -67,6 +72,7 @@ export default function App() {
   }, [notice])
 
   const newProject = () => {
+    setShowBlankDsl(false)
     set({
       project: undefined,
       content: '',
@@ -84,6 +90,35 @@ export default function App() {
       selectedNodeId: undefined,
       notice: 'New local workspace ready.',
     })
+  }
+
+  const createBlankDsl = async (templateId: StarterTemplateId) => {
+    try {
+      const starter = createStarterDsl(templateId)
+      const validation = await desktop.runtime.validate(starter.dsl)
+      const parsed = parseDsl(starter.dsl).document
+      setShowBlankDsl(false)
+      set({
+        project: undefined,
+        content: starter.dsl,
+        requirement: '',
+        parsed,
+        validation,
+        simulation: undefined,
+        documentation: parsed ? generateDocumentation(parsed, validation) : '',
+        generatedTests: parsed ? generateTestPlan(parsed) : '',
+        proposedDsl: undefined,
+        fixApprovalId: undefined,
+        approvalPromptId: undefined,
+        debuggerLaunch: undefined,
+        activeTab: 'visual',
+        selectedNodeId: undefined,
+        notice: `Created ${starter.title} starter DSL.`,
+      })
+    }
+    catch (error) {
+      set({ notice: error instanceof Error ? error.message : String(error) })
+    }
   }
 
   const openProject = async (id: string) => {
@@ -346,6 +381,7 @@ export default function App() {
     <div className="app-shell">
       <Sidebar
         onNew={newProject}
+        onBlank={() => setShowBlankDsl(true)}
         onUpload={upload}
         onOpen={openProject}
         onRename={renameProject}
@@ -363,6 +399,12 @@ export default function App() {
           {showInspector && <Inspector />}
         </div>
       </main>
+      {showBlankDsl && (
+        <BlankDslModal
+          onClose={() => setShowBlankDsl(false)}
+          onSelect={templateId => void createBlankDsl(templateId)}
+        />
+      )}
       <ApprovalPrompt />
       {notice && <div className="toast" role="status">{notice}</div>}
     </div>

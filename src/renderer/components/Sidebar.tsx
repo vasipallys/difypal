@@ -24,6 +24,7 @@ import { useWorkspace } from '@/renderer/stores/workspace'
 
 interface Props {
   onNew: () => void
+  onBlank: () => void
   onUpload: () => void
   onOpen: (id: string) => void
   onRename: (id: string, name: string) => Promise<void>
@@ -31,7 +32,7 @@ interface Props {
   onStop: () => Promise<void>
 }
 
-export function Sidebar({ onNew, onUpload, onOpen, onRename, onRun, onStop }: Props) {
+export function Sidebar({ onNew, onBlank, onUpload, onOpen, onRename, onRun, onStop }: Props) {
   const { projects, project, activeTab, busy, apiRuntime, set } = useWorkspace()
   const [menuProjectId, setMenuProjectId] = useState<string>()
   const [editingProjectId, setEditingProjectId] = useState<string>()
@@ -84,7 +85,7 @@ export function Sidebar({ onNew, onUpload, onOpen, onRename, onRun, onStop }: Pr
         <span className="sidebar-label">Create</span>
         <button className="sidebar-link primary" onClick={onNew}><Plus size={16} /> New from requirement</button>
         <button className="sidebar-link" onClick={onUpload}><Upload size={16} /> Upload DSL</button>
-        <button className="sidebar-link" onClick={onNew}><FileCode2 size={16} /> Blank DSL</button>
+        <button className="sidebar-link" onClick={onBlank}><FileCode2 size={16} /> Blank DSL</button>
       </div>
 
       <div className="sidebar-section">
